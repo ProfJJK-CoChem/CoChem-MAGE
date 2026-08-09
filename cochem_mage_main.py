@@ -20,6 +20,15 @@ class MAGEOrchestrator:
         self.config = self._load_config()
         self.is_initialized = False
         
+    def _get_artifact_dir(self) -> Path:
+        """Get the artifact directory path from environment variable or default to home."""
+        artifact_dir = os.environ.get('COCHEM_ARTIFACT_DIR')
+        if artifact_dir:
+            return Path(artifact_dir)
+        else:
+            # Default to home directory with .cochem/artifacts
+            return Path.home() / ".cochem" / "artifacts" / "mage"
+        
     def _load_config(self) -> dict:
         """Load configuration from JSON file."""
         try:
@@ -28,10 +37,11 @@ class MAGEOrchestrator:
         except FileNotFoundError:
             print(f"⚠️  Configuration file {self.config_file} not found")
             # Return default config
+            artifact_dir = self._get_artifact_dir()
             return {
                 "project_name": "CoChem-MAGE",
                 "version": "0.1.0",
-                "data_dir": "./cochem_mage_data"
+                "data_dir": str(artifact_dir / "data")
             }
         except json.JSONDecodeError as e:
             print(f"❌ Error loading configuration: {e}")
@@ -42,7 +52,8 @@ class MAGEOrchestrator:
         print("🚀 Initializing CoChem-MAGE System...")
         
         # Create data directories
-        data_dir = Path(self.config.get('data_dir', './cochem_mage_data'))
+        artifact_dir = self._get_artifact_dir()
+        data_dir = Path(self.config.get('data_dir', str(artifact_dir / "data")))
         data_dir.mkdir(parents=True, exist_ok=True)
         
         # Create subdirectories for different modules

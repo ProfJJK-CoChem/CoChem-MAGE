@@ -5,6 +5,7 @@ Handles all configuration settings for the MAGE system.
 """
 
 import json
+import os
 from pathlib import Path
 
 class MAGEConfig:
@@ -17,24 +18,40 @@ class MAGEConfig:
         self.config_file = config_file
         self.config = self._load_config()
         
+    def _get_artifact_dir(self) -> Path:
+        """Get the artifact directory path from environment variable or default to home."""
+        artifact_dir = os.environ.get('COCHEM_ARTIFACT_DIR')
+        if artifact_dir:
+            return Path(artifact_dir)
+        else:
+            # Default to home directory with .cochem/artifacts
+            return Path.home() / ".cochem" / "artifacts" / "mage"
+        
     def _load_config(self) -> dict:
         """Load configuration from file."""
         try:
             with open(self.config_file, 'r') as f:
-                return json.load(f)
+                config = json.load(f)
+                # Set data_dir to artifact directory if not already set
+                if 'data_dir' not in config:
+                    artifact_dir = self._get_artifact_dir()
+                    config['data_dir'] = str(artifact_dir / "data")
+                return config
         except FileNotFoundError:
             # Return default configuration
-            return self._get_default_config()
+            artifact_dir = self._get_artifact_dir()
+            return self._get_default_config(artifact_dir)
         except json.JSONDecodeError as e:
             print(f"❌ Error loading config: {e}")
-            return self._get_default_config()
+            artifact_dir = self._get_artifact_dir()
+            return self._get_default_config(artifact_dir)
             
-    def _get_default_config(self) -> dict:
+    def _get_default_config(self, artifact_dir: Path) -> dict:
         """Get default configuration values."""
         return {
             "project_name": "CoChem-MAGE",
             "version": "0.1.0",
-            "data_dir": "./cochem_mage_data",
+            "data_dir": str(artifact_dir / "data"),
             "simulation_modules": {
                 "rrkm": {"enabled": True},
                 "chrom_opt": {"enabled": True}
