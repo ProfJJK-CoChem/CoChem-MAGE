@@ -123,7 +123,7 @@ class MageDescriptorCache:
 if __name__ == "__main__":
     cache = MageDescriptorCache()
     
-    # Mock Validated Data from Stage 1.0 (Segment A)
+    # Sample Validated Data from Stage 1.0 (Segment A)
     smi = "CC(=O)OC1=CC=CC=C1C(=O)O" # Aspirin
     mock_job = [{"smiles": smi, "rdkit_mol": Chem.MolFromSmiles(smi), "status": "SANITIZED"}]
     

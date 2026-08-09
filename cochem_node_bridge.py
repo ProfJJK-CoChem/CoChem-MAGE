@@ -27,8 +27,9 @@ class NodeBridge:
         """
         self.config_path = Path(config_path)
         self.ssh_client = paramiko.SSHClient()
-        # Automatically add unknown host keys to maintain seamless headless execution
-        self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # Enforce strict security policy by loading system host keys and rejecting unverified hosts (MAGE-16)
+        self.ssh_client.load_system_host_keys()
+        self.ssh_client.set_missing_host_key_policy(paramiko.RejectPolicy())
         self.sftp_client: Optional[paramiko.SFTPClient] = None
         self.connected = False
         
@@ -48,6 +49,21 @@ class NodeBridge:
             logger.error(f"Registry corruption detected: {e}")
             return {}
 
+    def _find_default_ssh_key(self) -> Optional[str]:
+        """
+        Discovers modern SSH private keys checking ed25519 and ecdsa before legacy id_rsa (MAGE-17).
+        """
+        ssh_dir = Path.home() / ".ssh"
+        key_candidates = [
+            ssh_dir / "id_ed25519",
+            ssh_dir / "id_ecdsa",
+            ssh_dir / "id_rsa"
+        ]
+        for key in key_candidates:
+            if key.exists():
+                return str(key)
+        return str(ssh_dir / "id_ed25519")
+
     def connect(self, target_cluster: str = "primary") -> bool:
         """
         Establishes the SSH and SFTP connections securely using key-pairs.
@@ -59,7 +75,7 @@ class NodeBridge:
         cluster_data = self.hpc_config[target_cluster]
         hostname = cluster_data.get("host")
         username = cluster_data.get("user")
-        key_path = cluster_data.get("ssh_key_path", os.path.expanduser("~/.ssh/id_rsa"))
+        key_path = cluster_data.get("ssh_key_path", self._find_default_ssh_key())
 
         if not hostname or not username:
             logger.error("Incomplete HPC registry block. Hostname and User are required.")

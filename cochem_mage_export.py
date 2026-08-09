@@ -14,8 +14,8 @@ class MageExporter:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def _generate_gaussian_peak(self, rt, intensity, width=0.05, resolution=100):
-        """Generates a synthetic Gaussian peak array for plotting."""
+    def _generate_gaussian_peak(self, rt, intensity, width=0.05, resolution=500):
+        """Generates a Gaussian peak array for plotting with high resolution (500 points) (MAGE-09)."""
         x = np.linspace(rt - (width * 4), rt + (width * 4), resolution)
         y = intensity * np.exp(-0.5 * ((x - rt) / width) ** 2)
         return x, y
@@ -24,20 +24,33 @@ class MageExporter:
         """Compiles the theoretical GC-IMS-MS chromatogram into an interactive HTML widget."""
         fig = go.Figure()
         
-        baseline_x = np.linspace(0, max([j.get("estimated_rt", 10) for j in job_queue] + [15]) + 2, 1000)
+        # Read predicted_tr from job_queue (MAGE-08)
+        rts = []
+        for j in job_queue:
+            tr = j.get("predicted_tr") or j.get("estimated_rt")
+            if tr is not None:
+                rts.append(tr)
+        max_rt = max(rts + [15.0]) + 2.0
+        
+        baseline_x = np.linspace(0, max_rt, 1000)
         global_y = np.zeros_like(baseline_x)
 
         for job in job_queue:
             if job.get("status") not in ["COMPUTED", "CACHED"]:
                 continue
                 
-            # Mock retention time (RT) logic based on LogP and BP proxy for demonstration
-            # In production, this uses the deep MAGE simulation core
-            rt = max(1.5, min(15.0, job.get("logp", 2.0) * 1.5 + (job.get("mw", 100) / 50.0)))
-            job["estimated_rt"] = round(rt, 2)
-            intensity = 1.0e6 * (1.0 + (job.get("tpsa", 0) / 100.0)) # Mock abundance
+            # Read predicted_tr calculated by Stage 3.0 (MAGE-08)
+            rt = job.get("predicted_tr")
+            if rt is None:
+                rt = job.get("estimated_rt")
+            if rt is None:
+                # Fallback only if predicted_tr and estimated_rt are both missing
+                rt = max(1.5, min(15.0, job.get("logp", 2.0) * 1.5 + (job.get("mw", 100) / 50.0)))
             
-            x_peak, y_peak = self._generate_gaussian_peak(rt, intensity)
+            job["estimated_rt"] = round(rt, 2)
+            intensity = job.get("peak_intensity", 1.0e6 * (1.0 + (job.get("tpsa", 0) / 100.0)))
+            
+            x_peak, y_peak = self._generate_gaussian_peak(rt, intensity, resolution=500)
             
             # Add individual traces for hover intelligence
             fig.add_trace(go.Scatter(
@@ -86,7 +99,7 @@ class MageExporter:
                     "mw": job.get("mw"),
                     "tpsa": job.get("tpsa"),
                     "ccs_proxy": job.get("ccs"),
-                    "estimated_rt_min": job.get("estimated_rt")
+                    "estimated_rt_min": job.get("estimated_rt", job.get("predicted_tr"))
                 })
 
         out_path = os.path.join(self.output_dir, filename)

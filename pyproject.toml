@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cochem-mage"
+version = "0.1.0"
+description = "CoChem-MAGE: Mass and Gas-chromatography Emulator"
+authors = [{ name = "CoChem Team" }]
+dependencies = [
+    "torch",
+    "networkx",
+    "numpy",
+    "scipy",
+    "rdkit",
+    "plotly",
+    "xgboost",
+    "h5py",
+    "paramiko",
+    "pyyaml",
+    "requests"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest"
+]

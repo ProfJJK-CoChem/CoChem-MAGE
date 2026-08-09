@@ -1,7 +1,10 @@
 # %%
 import numpy as np
+import logging
 from scipy.optimize import minimize
 import warnings
+
+logger = logging.getLogger("MageOptimizationEngine")
 
 class MageOptimizationEngine:
     """
@@ -9,10 +12,11 @@ class MageOptimizationEngine:
     Optimizes GC temperature ramp rates to maximize adjacent peak resolution (Rs).
     Gracefully falls back to raw topological estimates if separation is impossible.
     """
-    def __init__(self, target_resolution=1.5, theoretical_plates=15000, max_time_min=60.0):
+    def __init__(self, target_resolution=1.5, theoretical_plates=15000, max_time_min=60.0, instrument_profile=None):
         self.target_rs = target_resolution
         self.plates = theoretical_plates
         self.max_time = max_time_min
+        self.instrument_profile = instrument_profile or {}
         print(f"⚙️ MAGE Optimizer initialized. Target Rs: {self.target_rs} | Max Time: {self.max_time} min")
 
     def _simulate_tr_array(self, ri_array, ramp_rate):
@@ -21,7 +25,15 @@ class MageOptimizationEngine:
         # Proxy scaling: higher ramp rates compress the chromatogram
         return dead_time + (ri_array / 100.0) * (20.0 / ramp_rate)
 
-    def _objective_function(self, ramp_rate, ri_array):
+    def _compute_tpgc_peak_width(self, tr, dead_time=1.5, alpha=0.05):
+        """
+        Temperature-Programmed GC (TPGC) peak width model (MAGE-03).
+        w = w_0 * (1 + alpha * t_R)^(1/2) where w_0 = 4 * dead_time / sqrt(N).
+        """
+        w_0 = 4.0 * (dead_time / np.sqrt(self.plates))
+        return w_0 * np.sqrt(1.0 + alpha * tr)
+
+    def _objective_function(self, ramp_rate, ri_array, max_ramp=40.0):
         """
         The cost function for SciPy. We want to MAXIMIZE minimum resolution, 
         which means MINIMIZING the negative minimum resolution, with penalties.
@@ -31,18 +43,17 @@ class MageOptimizationEngine:
         
         # Enforce physical bounds (cannot have negative or near-zero ramp)
         if rate < 1.0: return 9999.0
-        if rate > 50.0: return 9999.0
+        if rate > max_ramp: return 9999.0
 
         tr_array = self._simulate_tr_array(ri_array, rate)
         max_tr = np.max(tr_array)
         
-        # Calculate Resolutions between adjacent peaks
+        # Calculate Resolutions between adjacent peaks using TPGC peak width (MAGE-03)
         resolutions = []
         for i in range(len(tr_array) - 1):
             tr1, tr2 = tr_array[i], tr_array[i+1]
-            # sigma = tR / sqrt(N)
-            w1 = 4 * (tr1 / np.sqrt(self.plates))
-            w2 = 4 * (tr2 / np.sqrt(self.plates))
+            w1 = self._compute_tpgc_peak_width(tr1)
+            w2 = self._compute_tpgc_peak_width(tr2)
             rs = (tr2 - tr1) / (0.5 * (w1 + w2))
             resolutions.append(rs)
             
@@ -59,15 +70,25 @@ class MageOptimizationEngine:
             return -min_rs + time_penalty
 
     def _disaster_recovery(self, active_matrix, error_msg):
-        """Flags the batch when optimization fails, preserving the data pipeline."""
-        print(f"⚠️ DISASTER RECOVERY TRIGGERED: {error_msg}")
+        """
+        Flags the batch when optimization fails, preserving the data pipeline.
+        Logs formal warning telemetry and sets inspectable exception flags (MAGE-04).
+        """
+        warning_str = f"DISASTER RECOVERY TRIGGERED: {error_msg}"
+        print(f"⚠️ {warning_str}")
+        logger.warning(warning_str)
         for job in active_matrix:
             job["optimization_status"] = "LOW_FIDELITY_FALLBACK"
             job["optimal_ramp_rate"] = 15.0 # Default safe fallback
+            job["disaster_recovery_flag"] = True
+            job["disaster_recovery_reason"] = error_msg
         return active_matrix
 
-    def optimize_separation(self, active_matrix):
+    def optimize_separation(self, active_matrix, instrument_profile=None):
         """Main entry point to solve for the best chromatographic parameters."""
+        profile = instrument_profile or self.instrument_profile
+        max_ramp = profile.get("column_physics", {}).get("max_ramp_rate", 40.0) if profile else 40.0
+
         valid_jobs = [j for j in active_matrix if j.get("status") in ["COMPUTED", "CACHED"]]
         
         if len(valid_jobs) < 2:
@@ -84,20 +105,22 @@ class MageOptimizationEngine:
             return self._disaster_recovery(active_matrix, "Critical Co-Elution Detected (ΔRI < 1.0).")
 
         try:
-            # SciPy bounded minimization
+            initial_guess = min(10.0, max_ramp / 2.0)
+            # SciPy bounded minimization with dynamic ramp bounds (MAGE-02)
             res = minimize(
                 self._objective_function,
-                x0=np.array([10.0]), # Initial guess: 10 C/min
-                args=(ri_array,),
-                bounds=[(2.0, 40.0)], # Physical oven limits
+                x0=np.array([initial_guess]),
+                args=(ri_array, max_ramp),
+                bounds=[(2.0, max_ramp)],
                 method='L-BFGS-B'
             )
             
             if res.success:
                 optimal_ramp = round(float(res.x[0]), 2)
-                # Calculate the final achieved critical resolution
+                # Calculate the final achieved critical resolution using TPGC peak width
                 tr_array = self._simulate_tr_array(ri_array, optimal_ramp)
-                min_rs = min([(tr_array[i+1]-tr_array[i]) / (2 * (tr_array[i]/np.sqrt(self.plates) + tr_array[i+1]/np.sqrt(self.plates))) for i in range(len(tr_array)-1)])
+                resolutions = [(tr_array[i+1]-tr_array[i]) / (0.5 * (self._compute_tpgc_peak_width(tr_array[i]) + self._compute_tpgc_peak_width(tr_array[i+1]))) for i in range(len(tr_array)-1)]
+                min_rs = min(resolutions) if resolutions else 1.5
                 
                 print(f"✅ Optimization converged. Optimal Ramp: {optimal_ramp} °C/min | Critical Rs: {min_rs:.2f}")
                 
@@ -107,6 +130,7 @@ class MageOptimizationEngine:
                 for job in active_matrix:
                     job["optimal_ramp_rate"] = optimal_ramp
                     job["optimization_status"] = "OPTIMIZED"
+                    job["disaster_recovery_flag"] = False
             else:
                 return self._disaster_recovery(active_matrix, "SciPy Optimizer failed to converge.")
 
@@ -117,7 +141,6 @@ class MageOptimizationEngine:
 
 # Execute Optimization Test
 if __name__ == "__main__":
-    # Mocking output from Stage 3.0
     mock_matrix = [
         {"id": "mol_A", "predicted_ri": 950.0, "status": "CACHED"},
         {"id": "mol_B", "predicted_ri": 980.0, "status": "COMPUTED"},

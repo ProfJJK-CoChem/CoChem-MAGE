@@ -6,15 +6,13 @@ class MageGraphBuilder:
     """
     Segment 2.2b: Topological Graph & BDE Initialization for CoChem-MAGE.
     Translates RDKit molecular topology into PyTorch-ready tensor structures
-    and assigns Bond Dissociation Energy (BDE) thresholds for 70 eV EI simulation.
+    and assigns environment-aware Bond Dissociation Energy (BDE) thresholds (MAGE-15).
     """
     
     # Baseline heuristic BDE limits (in eV) for rapid topological pruning.
-    # Standard 70 eV EI imparts massive excess energy, but these serve as the 
-    # absolute physical floor to prevent unphysical shattering.
     BDE_THRESHOLDS_EV = {
-        Chem.rdchem.BondType.SINGLE: 3.5,
-        Chem.rdchem.BondType.AROMATIC: 5.0,
+        Chem.rdchem.BondType.SINGLE: 3.6,
+        Chem.rdchem.BondType.AROMATIC: 4.9,
         Chem.rdchem.BondType.DOUBLE: 6.5,
         Chem.rdchem.BondType.TRIPLE: 8.5
     }
@@ -28,16 +26,46 @@ class MageGraphBuilder:
             
         print(f"⚙️ MAGE Graph Builder initialized. Compute device: {self.device}")
 
+    def _is_benzylic_or_allylic(self, atom):
+        """Checks if atom is benzylic or allylic (adjacent to an aromatic ring or double bond)."""
+        for nbr_bond in atom.GetBonds():
+            if nbr_bond.GetIsAromatic() or nbr_bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
+                return True
+        return False
+
     def _estimate_edge_bde(self, bond):
-        """Estimates the energy required to homolytically cleave a specific bond."""
+        """
+        Estimates energy required to homolytically cleave a specific bond, 
+        accounting for local chemical environment (allylic, benzylic, aliphatic, aromatic) (MAGE-15).
+        """
         bond_type = bond.GetBondType()
-        base_bde = self.BDE_THRESHOLDS_EV.get(bond_type, 3.0)
+        base_bde = self.BDE_THRESHOLDS_EV.get(bond_type, 3.6)
         
-        # Implement minor thermodynamic penalties for heavy halogens
         a1, a2 = bond.GetBeginAtom(), bond.GetEndAtom()
-        if a1.GetAtomicNum() in [17, 35] or a2.GetAtomicNum() in [17, 35]:
-            base_bde -= 0.5  # Halogen bonds are generally weaker/easier to cleave
-            
+        z1, z2 = a1.GetAtomicNum(), a2.GetAtomicNum()
+
+        # Check aromatic ring bonds
+        if bond.GetIsAromatic() or (a1.GetIsAromatic() and a2.GetIsAromatic()):
+            return 4.9
+
+        # C-Halogen BDE environment rules
+        if 17 in (z1, z2): # Chlorine
+            return 3.5
+        elif 35 in (z1, z2): # Bromine
+            return 2.9
+        elif 53 in (z1, z2): # Iodine
+            return 2.4
+
+        # Environment-aware adjustments for single C-C / C-H / C-O bonds
+        if bond_type == Chem.rdchem.BondType.SINGLE:
+            is_allylic_or_benzylic = self._is_benzylic_or_allylic(a1) or self._is_benzylic_or_allylic(a2)
+            if is_allylic_or_benzylic:
+                # Allylic/benzylic cleavage is resonance-stabilized (~3.0 eV)
+                base_bde = 3.0
+            else:
+                # Standard aliphatic single bond (~3.6 eV)
+                base_bde = 3.6
+
         return base_bde
 
     def build_tensor_graph(self, mol):
@@ -96,7 +124,7 @@ if __name__ == "__main__":
     test_mol = Chem.MolFromSmiles(smiles)
     Chem.SanitizeMol(test_mol)
     
-    print(f"\\n🧪 Building PyTorch Graph for {smiles}...")
+    print(f"\n🧪 Building PyTorch Graph for {smiles}...")
     graph = builder.build_tensor_graph(test_mol)
     
     print(f"Nodes (Atoms): {graph['num_nodes']}")
