@@ -4,6 +4,7 @@ import json
 import yaml
 import urllib.parse
 import requests
+from pathlib import Path
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import Descriptors
@@ -35,7 +36,20 @@ class MageIngestor:
     Stage 1.0 (Update): Smart Ingestion & Instrument Profiling.
     Now includes Column Intelligence and NIST API Failover checks.
     """
-    def __init__(self, sys_config_path="./cochem_setup/cochem_system_config.json", registry_path="mage_column_registry.json"):
+    def __init__(self, sys_config_path=None, registry_path="mage_column_registry.json"):
+        if sys_config_path is None:
+            env_p = os.environ.get("COCHEM_SYSTEM_CONFIG")
+            if env_p and os.path.exists(env_p):
+                sys_config_path = env_p
+            else:
+                root_p = Path(__file__).resolve().parent / "cochem_system_config.json"
+                parent_root_p = Path(__file__).resolve().parents[1] / "cochem_system_config.json"
+                if root_p.exists():
+                    sys_config_path = str(root_p)
+                elif parent_root_p.exists():
+                    sys_config_path = str(parent_root_p)
+                else:
+                    sys_config_path = str(root_p)
         self.sys_config_path = sys_config_path
         self.registry_path = registry_path
         self.system_config = {}

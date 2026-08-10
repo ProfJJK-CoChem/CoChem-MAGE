@@ -59,6 +59,8 @@ class HalogenIsotopeGenerator:
         Calculates isotope cluster distribution for general molecular formula dictionary.
         e.g. {'C': 6, 'H': 6, 'N': 1, 'O': 1, 'S': 0, 'Si': 0, 'Cl': 1, 'Br': 0}
         """
+        if not isinstance(formula_dict, dict):
+            formula_dict = {}
         cache_key = tuple(sorted(formula_dict.items()))
         if cache_key in self._cache:
             return self._cache[cache_key]
@@ -74,7 +76,11 @@ class HalogenIsotopeGenerator:
         ]
 
         for elem, delta, p0, p1 in element_params:
-            n_atoms = formula_dict.get(elem, 0)
+            raw_n = formula_dict.get(elem)
+            try:
+                n_atoms = int(raw_n) if raw_n is not None else 0
+            except (ValueError, TypeError):
+                n_atoms = 0
             if n_atoms > 0:
                 elem_cluster = self._get_single_element_cluster(n_atoms, delta, p0, p1)
                 new_dist = defaultdict(float)

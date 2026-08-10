@@ -8,6 +8,8 @@ import os
 import sys
 import json
 from pathlib import Path
+from uuid import uuid4
+from datetime import datetime
 try:
     import h5py
 except ImportError:
@@ -87,19 +89,29 @@ class MAGEOrchestrator:
             print("⚠️ h5py not installed, skipping HDF5 serialization.")
             return h5_path
 
+        if not isinstance(data, dict):
+            return h5_path
+
         try:
             with h5py.File(h5_path, "a") as h5f:
                 mage_grp = h5f.require_group("mage")
-                sim_grp = mage_grp.create_group(f"run_{int(Path(h5_path).stat().st_mtime) if Path(h5_path).exists() else 0}")
+                now_str = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                unique_grp_name = f"run_{now_str}_{uuid4().hex[:6]}"
+                sim_grp = mage_grp.create_group(unique_grp_name)
                 sim_grp.attrs["LAM_TRIGGER_REQUIRED"] = data.get("LAM_TRIGGER_REQUIRED", False)
                 sim_grp.attrs["symmetry_group"] = data.get("symmetry_group", "C1")
+                sim_grp.attrs["provenance_tag"] = data.get("provenance_tag", "[D]")
                 
-                if "results" in data and isinstance(data["results"], list):
-                    for idx, res in enumerate(data["results"]):
+                results = data.get("results")
+                if isinstance(results, list):
+                    valid_results = [r for r in results if isinstance(r, dict)]
+                    for idx, res in enumerate(valid_results):
                         sub = sim_grp.create_group(f"item_{idx}")
                         for k, v in res.items():
                             if isinstance(v, (int, float, str, bool)):
                                 sub.attrs[k] = v
+                        if "provenance_tag" not in sub.attrs:
+                            sub.attrs["provenance_tag"] = res.get("provenance_tag", "[D]" if res.get("status") == "COMPUTED" else "[E]")
             print(f"💾 Exported MAGE state to HDF5 lake: {h5_path}")
         except Exception as e:
             print(f"⚠️ HDF5 export warning: {e}")
@@ -111,19 +123,33 @@ class MAGEOrchestrator:
         if not self.is_initialized:
             raise RuntimeError("MAGE system must be initialized before running simulations")
             
+        if not isinstance(input_data, dict):
+            input_data = {}
+            
+        # Ensure it accepts MPQC JSON payloads and doesn't conflict with MLFF inference
+        is_mpqc_payload = "mpqc" in input_data or str(input_data.get("generator", "")).lower() == "mpqc"
+        if is_mpqc_payload:
+            print("ℹ️ Detected MPQC JSON payload. Ensuring MLFF inference pipeline compatibility with MPQC single-points.")
+            # Extract smiles from MPQC payload if nested
+            if "smiles" not in input_data and "molecule" in input_data and isinstance(input_data["molecule"], dict):
+                input_data["smiles"] = input_data["molecule"].get("smiles")
+            
         print(f"🔬 Running {simulation_type} simulation...")
         results = {}
         
-        if simulation_type.lower() == "rrkm":
+        sim_type_str = str(simulation_type or "").lower()
+        if sim_type_str == "rrkm":
             fragmenter = MageFragmenter()
             graph_data = input_data.get("graph_data")
-            smiles = input_data.get("smiles") or input_data.get("molecule")
+            raw_smiles = input_data.get("smiles") or input_data.get("molecule")
             if graph_data is not None:
                 results["spectrum"] = fragmenter.simulate_spectrum(graph_data)
-            elif smiles:
-                if smiles.lower() == "benzene":
+            elif raw_smiles is not None:
+                smiles = str(raw_smiles)
+                smiles_lower = smiles.lower()
+                if smiles_lower == "benzene":
                     smiles = "c1ccccc1"
-                elif smiles.lower() == "aspirin":
+                elif smiles_lower == "aspirin":
                     smiles = "CC(=O)Oc1ccccc1C(=O)O"
                 g = fragmenter.graph_from_smiles(smiles)
                 results["spectrum"] = fragmenter.simulate_spectrum(g)
@@ -132,7 +158,7 @@ class MAGEOrchestrator:
                 results["spectrum"] = fragmenter.simulate_spectrum(g)
             results["status"] = "COMPLETED"
             
-        elif simulation_type.lower() in ["chromatography", "chrom"]:
+        elif sim_type_str in ["chromatography", "chrom"]:
             col_config = input_data.get("column_config", {"length_m": 30.0, "stationary_phase": "5% phenyl"})
             sim = MageChromatographySim(col_config)
             jobs = input_data.get("jobs", [

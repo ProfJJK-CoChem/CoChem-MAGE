@@ -35,7 +35,8 @@ class MageTelemetryBridge:
             "current_operation": "Awaiting batch submission...",
             "active_isomer": None,
             "optimization_rs": None,
-            "error_flag": None
+            "error_flag": None,
+            "provenance_tag": "[D]"
         }
         
         self._setup_routes()
@@ -53,12 +54,20 @@ class MageTelemetryBridge:
 
     def update_state(self, status: str, progress: float, operation: str, 
                      isomer: Optional[str] = None, rs: Optional[float] = None, 
-                     error: Optional[str] = None):
+                     error: Optional[str] = None, provenance_tag: str = "[D]"):
         """Thread-safe method for the MAGE engine to report its current progress."""
         with self._lock:
             self.current_state["status"] = status
-            self.current_state["progress_percent"] = round(progress, 2)
+            if progress is not None:
+                try:
+                    safe_progress = round(float(progress), 2)
+                except (TypeError, ValueError):
+                    safe_progress = 0.0
+            else:
+                safe_progress = 0.0
+            self.current_state["progress_percent"] = safe_progress
             self.current_state["current_operation"] = operation
+            self.current_state["provenance_tag"] = provenance_tag
             if isomer is not None:
                 self.current_state["active_isomer"] = isomer
             if rs is not None:

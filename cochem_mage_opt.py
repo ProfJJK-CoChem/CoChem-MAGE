@@ -4,6 +4,14 @@ import logging
 from scipy.optimize import minimize
 import warnings
 
+def _safe_float(val, default=0.0):
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
 logger = logging.getLogger("MageOptimizationEngine")
 
 class MageOptimizationEngine:
@@ -25,13 +33,25 @@ class MageOptimizationEngine:
         # Proxy scaling: higher ramp rates compress the chromatogram
         return dead_time + (ri_array / 100.0) * (20.0 / ramp_rate)
 
-    def _compute_tpgc_peak_width(self, tr, dead_time=1.5, alpha=0.05):
+    def _compute_tpgc_peak_width(self, tr, dead_time=1.5, alpha=0.05, station_phase_params=None):
         """
-        Temperature-Programmed GC (TPGC) peak width model (MAGE-03).
+        Temperature-Programmed GC (TPGC) peak width model grounded in experimental phase parameters (MAGE-06).
         w = w_0 * (1 + alpha * t_R)^(1/2) where w_0 = 4 * dead_time / sqrt(N).
+        Safely guarded against N <= 0, negative t_R, and dead_time <= 0.
         """
-        w_0 = 4.0 * (dead_time / np.sqrt(self.plates))
-        return w_0 * np.sqrt(1.0 + alpha * tr)
+        safe_dead_time = max(_safe_float(dead_time, 1.5), 1.0)
+        plates = self.plates
+        if station_phase_params and isinstance(station_phase_params, dict):
+            length_mm = _safe_float(station_phase_params.get("length_m"), 30.0) * 1000.0
+            hetp_mm = _safe_float(station_phase_params.get("hetp_mm"), 0.05)
+            plates = length_mm / max(hetp_mm, 1e-4)
+
+        safe_plates = max(_safe_float(plates, 15000.0), 1.0)
+        w_0 = 4.0 * (safe_dead_time / np.sqrt(safe_plates))
+        tr_val = _safe_float(tr, 0.0)
+        safe_alpha = _safe_float(alpha, 0.05)
+        sqrt_term = np.sqrt(max(1.0 + safe_alpha * tr_val, 1e-6))
+        return float(w_0 * sqrt_term)
 
     def _objective_function(self, ramp_rate, ri_array, max_ramp=40.0):
         """
@@ -45,7 +65,12 @@ class MageOptimizationEngine:
         if rate < 1.0: return 9999.0
         if rate > max_ramp: return 9999.0
 
+        if ri_array is None or len(ri_array) == 0:
+            return 9999.0
+
         tr_array = self._simulate_tr_array(ri_array, rate)
+        if len(tr_array) == 0:
+            return 9999.0
         max_tr = np.max(tr_array)
         
         # Calculate Resolutions between adjacent peaks using TPGC peak width (MAGE-03)
@@ -77,28 +102,38 @@ class MageOptimizationEngine:
         warning_str = f"DISASTER RECOVERY TRIGGERED: {error_msg}"
         print(f"⚠️ {warning_str}")
         logger.warning(warning_str)
-        for job in active_matrix:
+        if not active_matrix or not isinstance(active_matrix, (list, tuple)):
+            return []
+        for job in [j for j in active_matrix if isinstance(j, dict)]:
             job["optimization_status"] = "LOW_FIDELITY_FALLBACK"
             job["optimal_ramp_rate"] = 15.0 # Default safe fallback
             job["disaster_recovery_flag"] = True
             job["disaster_recovery_reason"] = error_msg
+            job["provenance_tag"] = "[E]"
         return active_matrix
 
     def optimize_separation(self, active_matrix, instrument_profile=None):
         """Main entry point to solve for the best chromatographic parameters."""
+        if not active_matrix or not isinstance(active_matrix, (list, tuple)):
+            return []
+
         profile = instrument_profile or self.instrument_profile
         max_ramp = profile.get("column_physics", {}).get("max_ramp_rate", 40.0) if profile else 40.0
 
-        valid_jobs = [j for j in active_matrix if j.get("status") in ["COMPUTED", "CACHED"]]
+        valid_jobs = [j for j in active_matrix if isinstance(j, dict) and j.get("status") in ["COMPUTED", "CACHED"]]
         
         if len(valid_jobs) < 2:
             print("✅ Optimization bypassed: < 2 valid components in mixture.")
-            for job in valid_jobs: job["optimal_ramp_rate"] = 15.0
+            for job in valid_jobs:
+                job["optimal_ramp_rate"] = 15.0
+                job["provenance_tag"] = job.get("provenance_tag", "[E]")
             return active_matrix
             
         # Extract and sort RI array
-        ri_values = sorted([j.get("predicted_ri", 0) for j in valid_jobs])
+        ri_values = sorted([_safe_float(j.get("predicted_ri"), 0.0) for j in valid_jobs])
         ri_array = np.array(ri_values)
+        if len(ri_array) < 2:
+            return active_matrix
         
         # Catch structurally identical overlapping isomers (RI difference ≈ 0)
         if np.min(np.diff(ri_array)) < 1.0:
@@ -127,10 +162,12 @@ class MageOptimizationEngine:
                 if min_rs < 0.6:
                     return self._disaster_recovery(active_matrix, f"Max theoretical Rs ({min_rs:.2f}) below threshold.")
                     
-                for job in active_matrix:
+                for job in valid_jobs:
                     job["optimal_ramp_rate"] = optimal_ramp
                     job["optimization_status"] = "OPTIMIZED"
                     job["disaster_recovery_flag"] = False
+                    if "provenance_tag" not in job:
+                        job["provenance_tag"] = "[D]"
             else:
                 return self._disaster_recovery(active_matrix, "SciPy Optimizer failed to converge.")
 

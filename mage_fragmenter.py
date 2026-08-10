@@ -41,10 +41,16 @@ class MageFragmenter:
         from rdkit import Chem
         from rdkit.Chem import BRICS
 
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            raise ValueError(f"Invalid SMILES string: {smiles}")
-        mol = Chem.AddHs(mol)
+        if not isinstance(smiles, str) or not smiles.strip():
+            return None
+
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                return None
+            mol = Chem.AddHs(mol)
+        except Exception:
+            return None
         
         brics_bonds = set()
         try:
@@ -177,10 +183,16 @@ class MageFragmenter:
             return [G]
 
     def simulate_spectrum(self, graph_data, num_trajectories=100):
+        if not graph_data:
+            return {0.0: 0.0}
+
         if isinstance(graph_data, str):
             initial_G = self.graph_from_smiles(graph_data)
         else:
             initial_G = self._convert_tensor_to_nx(graph_data)
+
+        if initial_G is None or not hasattr(initial_G, "number_of_nodes") or initial_G.number_of_nodes() == 0:
+            return {0.0: 0.0}
             
         raw_spectrum = defaultdict(float)
 

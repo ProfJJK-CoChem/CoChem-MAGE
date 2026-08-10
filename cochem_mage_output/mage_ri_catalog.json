@@ -1,0 +1,14 @@
+[
+    {
+        "id":"j1",
+        "smiles":"",
+        "chemical_class":"N\/A",
+        "mw":0.0,
+        "logp":0.0,
+        "tpsa":0.0,
+        "predicted_ri":900.0,
+        "predicted_tr":0.0,
+        "status":"COMPUTED",
+        "provenance_tag":"[D]"
+    }
+]

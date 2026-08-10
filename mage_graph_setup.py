@@ -115,6 +115,52 @@ class MageGraphBuilder:
 
         return graph_data
 
+
+class MageWorkflowDAGCompiler:
+    """
+    Section 3.3 Spend-Priority Workflow DAG Compiler for CoChem-MAGE (MAGE-04).
+    Enforces strict 10-step spend-priority ordering for rotational spectroscopic assignment.
+    """
+    SPEND_PRIORITY_STEPS = [
+        ("intermolecular_geometry", "Geometry optimization (intermolecular separation R)", "T1-30min"),
+        ("delta_b_vib", "Anharmonic vibrational correction (Delta B_vib)", "T1-1h"),
+        ("frozen_monomers", "Monomer geometry freezing", "T1-10s"),
+        ("quartic_distortion", "Quartic centrifugal distortion (D_J, D_JK, D_K)", "T1-1min"),
+        ("inertial_defect", "Inertial defect and planar moments (Delta, P_alpha_alpha)", "T1-10s"),
+        ("signed_dipoles", "Signed dipole components (mu_a, mu_b, mu_c) in PAS", "T1-1min"),
+        ("nqcc_tensor", "Nuclear quadrupole coupling tensor (chi)", "T2-3h"),
+        ("v3_barrier", "Internal rotation barrier (V_3)", "T2-12h"),
+        ("tunnelling_splittings", "Tunnelling splittings (MS group)", "T3-1d"),
+        ("binding_energy_d0", "Binding energy D_0 (Post-assignment validation)", "T3-3d")
+    ]
+
+    def build_spend_priority_dag(self, molecule_info: dict) -> dict:
+        """Compiles 10-step DAG dictionary with nodes and dependency edges."""
+        if not isinstance(molecule_info, dict):
+            molecule_info = {}
+        nodes = []
+        edges = []
+
+        for idx, (step_id, desc, default_tier) in enumerate(self.SPEND_PRIORITY_STEPS):
+            nodes.append({
+                "step_number": idx + 1,
+                "step_id": step_id,
+                "description": desc,
+                "tier_budget": default_tier,
+                "state_in": f"state_step_{idx}" if idx > 0 else "initial_structure",
+                "state_out": f"state_step_{idx + 1}",
+                "provenance_tag": "[D]" if idx < 7 else "[E]"
+            })
+            if idx > 0:
+                edges.append({"from": f"step_{idx}", "to": f"step_{idx + 1}"})
+
+        return {
+            "molecule": molecule_info.get("smiles", "Unknown"),
+            "spend_priority_nodes": nodes,
+            "dependency_edges": edges,
+            "total_steps": len(nodes)
+        }
+
 # Execute Graph Build Test
 if __name__ == "__main__":
     builder = MageGraphBuilder()

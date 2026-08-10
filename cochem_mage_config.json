@@ -1,0 +1,53 @@
+{
+  "project_name": "CoChem-MAGE",
+  "version": "0.4.0",
+  "data_dir": "C:\\Users\\ansac\\.cochem\\artifacts\\mage\\data",
+  "product_class": "PRODUCT_A",
+  "tier_level": "T1-30min",
+  "simulation_modules": {
+    "rrkm": {
+      "enabled": true
+    },
+    "chrom_opt": {
+      "enabled": true
+    }
+  },
+  "defaults": {
+    "t1_method": "r2SCAN-3c",
+    "t2_composite": "junChS",
+    "t3_geometry": "CCSD(T)-F12"
+  },
+  "output": {
+    "format": "json",
+    "include_visualizations": true,
+    "export_to_csv": true
+  },
+  "performance": {
+    "node_scheduler_delegated": true,
+    "timeout_minutes": 60,
+    "wall_clock_budgets": [
+      "T1-10s",
+      "T1-1min",
+      "T1-30min",
+      "T1-1h",
+      "T2-3h",
+      "T2-12h",
+      "T3-1d",
+      "T3-3d",
+      "T4-1w",
+      "T4-1mo"
+    ]
+  },
+  "spend_priority": [
+    "intermolecular_geometry",
+    "delta_b_vib",
+    "frozen_monomers",
+    "quartic_distortion",
+    "inertial_defect",
+    "signed_dipoles",
+    "nqcc_tensor",
+    "v3_barrier",
+    "tunnelling_splittings",
+    "binding_energy_d0"
+  ]
+}
