@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 """
 CoChem-MAGE Comprehensive Adversarial Fuzzing and Stress Harness.
 Author: EMPIRICAL CHALLENGER
@@ -13,6 +15,7 @@ import sys
 import math
 import shutil
 import tempfile
+from typing import Any
 import threading
 import numpy as np
 import pytest
@@ -45,7 +48,7 @@ from mage_column_registry import MageIngestor, NistApiBridge
 # SECTION 1: EXPORT MODULE ADVERSARIAL FUZZING (cochem_mage_export)
 # ==============================================================================
 
-def test_exporter_interactive_chromatogram_fuzz(tmp_path):
+def test_exporter_interactive_chromatogram_fuzz(tmp_path) -> None:
     exporter = MageExporter(output_dir=str(tmp_path))
     
     # 1. Invalid job queues
@@ -78,7 +81,7 @@ def test_exporter_interactive_chromatogram_fuzz(tmp_path):
     assert os.path.exists(out_corrupt)
 
 
-def test_exporter_scribe_payload_fuzz(tmp_path):
+def test_exporter_scribe_payload_fuzz(tmp_path) -> None:
     exporter = MageExporter(output_dir=str(tmp_path))
     
     for bad_profile in [None, "not a dict", 12345, []]:
@@ -93,7 +96,7 @@ def test_exporter_scribe_payload_fuzz(tmp_path):
     assert os.path.exists(out_dirty)
 
 
-def test_exporter_head_to_tail_ms_plot_fuzz(tmp_path):
+def test_exporter_head_to_tail_ms_plot_fuzz(tmp_path) -> None:
     exporter = MageExporter(output_dir=str(tmp_path))
 
     # Test empty, non-dict, non-list, corrupt spectrum formats
@@ -112,7 +115,7 @@ def test_exporter_head_to_tail_ms_plot_fuzz(tmp_path):
         assert os.path.exists(out)
 
 
-def test_exporter_parquet_export_fuzz(tmp_path):
+def test_exporter_parquet_export_fuzz(tmp_path) -> None:
     exporter = MageExporter(output_dir=str(tmp_path))
 
     for bad_queue in [None, "invalid", 12345, [None, 456, "str"]]:
@@ -141,7 +144,7 @@ def test_exporter_parquet_export_fuzz(tmp_path):
 # SECTION 2: OPTIMIZATION MODULE ADVERSARIAL FUZZING (cochem_mage_opt)
 # ==============================================================================
 
-def test_opt_tpgc_peak_width_extreme_fuzz():
+def test_opt_tpgc_peak_width_extreme_fuzz() -> None:
     opt = MageOptimizationEngine()
     
     extreme_cases = [
@@ -158,7 +161,7 @@ def test_opt_tpgc_peak_width_extreme_fuzz():
         assert w > 0.0
 
 
-def test_opt_objective_function_extreme_fuzz():
+def test_opt_objective_function_extreme_fuzz() -> None:
     opt = MageOptimizationEngine()
     
     # Negative rates, massive rates, empty RI arrays
@@ -169,7 +172,7 @@ def test_opt_objective_function_extreme_fuzz():
     assert not math.isnan(obj_empty)
 
 
-def test_opt_optimize_separation_disaster_scenarios():
+def test_opt_optimize_separation_disaster_scenarios() -> None:
     opt = MageOptimizationEngine()
     
     # 1. Null / single element active matrix
@@ -199,7 +202,7 @@ def test_opt_optimize_separation_disaster_scenarios():
 # SECTION 3: CHROMATOGRAPHY SIMULATION ADVERSARIAL FUZZING (cochem_mage_sim)
 # ==============================================================================
 
-def test_sim_determine_product_class_precedence_and_types():
+def test_sim_determine_product_class_precedence_and_types() -> None:
     # Test precedence: Difference calc override over measured parent
     combo = {
         "is_difference_calculation": True,
@@ -215,7 +218,7 @@ def test_sim_determine_product_class_precedence_and_types():
         assert r["product_class"] == "PRODUCT_A"
 
 
-def test_sim_chi_indices_invalid_inputs():
+def test_sim_chi_indices_invalid_inputs() -> None:
     sim = MageChromatographySim({"length_m": 30.0})
     for bad_input in [None, "", "INVALID_SMILES_STRING", 12345, 3.14]:
         c0, c1 = sim._compute_chi_indices(bad_input)
@@ -223,7 +226,7 @@ def test_sim_chi_indices_invalid_inputs():
         assert c1 == 0.0
 
 
-def test_sim_van_deemter_hetp_extreme_params():
+def test_sim_van_deemter_hetp_extreme_params() -> None:
     sim = MageChromatographySim({"length_m": 30.0})
     
     # 1. Zero/Negative velocity
@@ -245,7 +248,7 @@ def test_sim_van_deemter_hetp_extreme_params():
     assert tag2 == "[D]"
 
 
-def test_sim_massive_job_queue_performance():
+def test_sim_massive_job_queue_performance() -> None:
     sim = MageChromatographySim({"length_m": 30.0})
     
     massive_jobs = [
@@ -268,7 +271,7 @@ def test_sim_massive_job_queue_performance():
     assert len(trace) == 2000
 
 
-def test_kovats_ri_math_functions_boundary_cases():
+def test_kovats_ri_math_functions_boundary_cases() -> None:
     # Isothermal Kovats: zero denominator fallback
     ri_iso = calculate_kovats_ri_isothermal(t_rx=5.0, t_rn=5.0, t_rN=5.0, n=5, N=6, t_m=1.5)
     assert ri_iso == 500.0
@@ -282,7 +285,7 @@ def test_kovats_ri_math_functions_boundary_cases():
 # SECTION 4: ISOTOPE PATTERN ADVERSARIAL FUZZING (mage_isotope)
 # ==============================================================================
 
-def test_halogen_isotope_generator_fuzz():
+def test_halogen_isotope_generator_fuzz() -> None:
     gen = HalogenIsotopeGenerator()
     
     # 1. Non-dict formula input
@@ -306,7 +309,7 @@ def test_halogen_isotope_generator_fuzz():
 # SECTION 5: FRAGMENTER & RRKM ADVERSARIAL FUZZING (mage_fragmenter)
 # ==============================================================================
 
-def test_fragmenter_invalid_smiles_and_graphs():
+def test_fragmenter_invalid_smiles_and_graphs() -> None:
     frag = MageFragmenter()
     
     # Invalid SMILES strings
@@ -320,7 +323,7 @@ def test_fragmenter_invalid_smiles_and_graphs():
         assert spec == {0.0: 0.0}
 
 
-def test_fragmenter_rrkm_beyer_swinehart_rate_bounds():
+def test_fragmenter_rrkm_beyer_swinehart_rate_bounds() -> None:
     frag = MageFragmenter()
 
     # 1. Energy below BDE threshold -> rate = 0.0
@@ -341,13 +344,13 @@ def test_fragmenter_rrkm_beyer_swinehart_rate_bounds():
 # SECTION 6: GRAPH BUILDER & DAG COMPILER (mage_graph_setup)
 # ==============================================================================
 
-def test_graph_builder_none_mol_raises():
+def test_graph_builder_none_mol_raises() -> None:
     builder = MageGraphBuilder()
     with pytest.raises(ValueError, match="Cannot build graph from NoneType"):
         builder.build_tensor_graph(None)
 
 
-def test_dag_compiler_non_dict_and_provenance_tags():
+def test_dag_compiler_non_dict_and_provenance_tags() -> None:
     compiler = MageWorkflowDAGCompiler()
     
     for bad_info in [None, "str", 12345, []]:
@@ -366,7 +369,7 @@ def test_dag_compiler_non_dict_and_provenance_tags():
 # SECTION 7: MAIN ORCHESTRATOR & TELEMETRY (cochem_mage_main, cochem_mage_telemetry)
 # ==============================================================================
 
-def test_orchestrator_uninitialized_and_h5_export(tmp_path):
+def test_orchestrator_uninitialized_and_h5_export(tmp_path) -> None:
     orch = MAGEOrchestrator()
     
     # 1. Uninitialized simulation raises RuntimeError
@@ -393,11 +396,11 @@ def test_orchestrator_uninitialized_and_h5_export(tmp_path):
     assert os.path.exists(res_valid)
 
 
-def test_telemetry_bridge_thread_safety_and_none_values():
+def test_telemetry_bridge_thread_safety_and_none_values() -> None:
     bridge = MageTelemetryBridge()
 
     # Concurrent state updates
-    def worker(worker_id):
+    def worker(worker_id) -> Any:
         for i in range(20):
             bridge.update_state(
                 status=f"RUNNING_{worker_id}",
@@ -424,7 +427,7 @@ def test_telemetry_bridge_thread_safety_and_none_values():
 # SECTION 8: DESCRIPTOR CACHE & COLUMN REGISTRY (cochem_mage_cache, mage_column_registry)
 # ==============================================================================
 
-def test_descriptor_cache_sqlite_operations(tmp_path):
+def test_descriptor_cache_sqlite_operations(tmp_path) -> None:
     db_file = tmp_path / "test_descriptors.db"
     cache = MageDescriptorCache(db_path=str(db_file))
 
@@ -438,7 +441,7 @@ def test_descriptor_cache_sqlite_operations(tmp_path):
     assert res[0]["status"] == "FAILED_PHYSICS"
 
 
-def test_ingestor_nist_api_failover(tmp_path):
+def test_ingestor_nist_api_failover(tmp_path) -> None:
     sys_cfg = tmp_path / "sys_config.json"
     reg_cfg = tmp_path / "col_registry.json"
     

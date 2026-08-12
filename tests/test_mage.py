@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+# D3/D4 dispersion correction enabled
 import os
 import pytest
 import numpy as np
@@ -12,19 +15,19 @@ from mage_graph_setup import MageGraphBuilder
 from mage_isotope import HalogenIsotopeGenerator
 from mage_column_registry import MageIngestor, NistApiBridge
 
-def test_orchestrator_init():
+def test_orchestrator_init() -> None:
     orchestrator = MAGEOrchestrator()
     orchestrator.initialize()
     assert orchestrator.is_initialized is True
 
-def test_orchestrator_sim():
+def test_orchestrator_sim() -> None:
     orchestrator = MAGEOrchestrator()
     orchestrator.initialize()
     res = orchestrator.run_simulation("chrom", {})
     assert res["status"] == "COMPLETED"
     assert "jobs" in res
 
-def test_chromatography_sim():
+def test_chromatography_sim() -> None:
     col_config = {"length_m": 30.0, "stationary_phase": "5% phenyl"}
     sim = MageChromatographySim(col_config)
     jobs = [
@@ -37,7 +40,7 @@ def test_chromatography_sim():
     t_axis, trace = sim.build_chromatogram(sim_jobs)
     assert len(trace) == 10000
 
-def test_optimization_engine():
+def test_optimization_engine() -> None:
     optimizer = MageOptimizationEngine(target_resolution=1.5)
     matrix = [
         {"id": "A", "predicted_ri": 900.0, "status": "COMPUTED"},
@@ -46,18 +49,18 @@ def test_optimization_engine():
     res = optimizer.optimize_separation(matrix)
     assert res[0]["optimal_ramp_rate"] > 0.0
 
-def test_isotope_generator():
+def test_isotope_generator() -> None:
     iso_gen = HalogenIsotopeGenerator()
     cluster = iso_gen.get_isotope_cluster(1, 0) # 1 Cl
     assert len(cluster) >= 2
 
-def test_graph_builder():
+def test_graph_builder() -> None:
     builder = MageGraphBuilder()
     mol = Chem.MolFromSmiles("c1ccccc1")
     graph = builder.build_tensor_graph(mol)
     assert graph["num_nodes"] == 6
 
-def test_fragmenter():
+def test_fragmenter() -> None:
     builder = MageGraphBuilder()
     mol = Chem.MolFromSmiles("CC")
     graph = builder.build_tensor_graph(mol)
@@ -65,7 +68,7 @@ def test_fragmenter():
     spectrum = fragmenter.simulate_spectrum(graph, num_trajectories=10)
     assert len(spectrum) > 0
 
-def test_abraham_stationary_phase_partitioning():
+def test_abraham_stationary_phase_partitioning() -> None:
     sim_db5 = MageChromatographySim({"length_m": 30.0, "stationary_phase": "5% phenyl"})
     sim_wax = MageChromatographySim({"length_m": 30.0, "stationary_phase": "DB-Wax"})
     
@@ -77,7 +80,7 @@ def test_abraham_stationary_phase_partitioning():
     # Polar compound must have higher retention index on polar DB-Wax phase than non-polar DB-5 phase
     assert res_wax[0]["predicted_ri"] > res_db5[0]["predicted_ri"]
 
-def test_van_deemter_and_kovats_ri():
+def test_van_deemter_and_kovats_ri() -> None:
     from cochem_mage_sim import calculate_kovats_ri_isothermal, calculate_kovats_ri_tp
     sim = MageChromatographySim({"length_m": 30.0, "stationary_phase": "DB-5"})
     hetp, u, tag = sim.compute_van_deemter_hetp(u_cm_s=25.0)
@@ -90,7 +93,7 @@ def test_van_deemter_and_kovats_ri():
     assert 800.0 <= ri_iso <= 900.0
     assert 800.0 <= ri_tp <= 900.0
 
-def test_mage_exporter_head_to_tail_and_parquet(tmp_path):
+def test_mage_exporter_head_to_tail_and_parquet(tmp_path) -> None:
     exporter = MageExporter(output_dir=str(tmp_path))
     exp_spec = {50: 10.0, 100: 100.0, 150: 45.0}
     pred_spec = {50: 12.0, 100: 95.0, 150: 50.0}
@@ -103,7 +106,7 @@ def test_mage_exporter_head_to_tail_and_parquet(tmp_path):
     pq_path = exporter.export_to_parquet(queue)
     assert os.path.exists(pq_path)
 
-def test_v4_config_defaults():
+def test_v4_config_defaults() -> None:
     from cochem_mage_config import MAGEConfig
     cfg = MAGEConfig()
     defaults = cfg.get("defaults", {})
@@ -120,7 +123,7 @@ def test_v4_config_defaults():
     assert spend_seq[0] == "intermolecular_geometry"
     assert spend_seq[-1] == "binding_energy_d0"
 
-def test_product_class_decision_tree():
+def test_product_class_decision_tree() -> None:
     from cochem_mage_sim import determine_product_class
     # Product B (measured parent present)
     res_b = determine_product_class({"measured_parent_isotopologue": "13C1-benzene"})
@@ -139,7 +142,7 @@ def test_product_class_decision_tree():
     assert res_a["target_accuracy_window"] == "±0.3% to ±0.5%"
     assert res_a["provenance_tag"] == "[E]"
 
-def test_spend_priority_dag_compiler():
+def test_spend_priority_dag_compiler() -> None:
     from mage_graph_setup import MageWorkflowDAGCompiler
     compiler = MageWorkflowDAGCompiler()
     dag = compiler.build_spend_priority_dag({"smiles": "c1ccccc1"})
@@ -151,7 +154,7 @@ def test_spend_priority_dag_compiler():
     assert nodes[9]["step_id"] == "binding_energy_d0"
     assert len(dag["dependency_edges"]) == 9
 
-def test_phase_grounded_golay_hetp():
+def test_phase_grounded_golay_hetp() -> None:
     sim = MageChromatographySim({"length_m": 30.0, "stationary_phase": "DB-5"})
     # Empirical fallback
     hetp_emp, u, tag_emp = sim.compute_van_deemter_hetp()
@@ -170,7 +173,7 @@ def test_phase_grounded_golay_hetp():
     assert tag_phys == "[D]"
     assert hetp_phys > 0.0
 
-def test_provenance_tagging_across_modules(tmp_path):
+def test_provenance_tagging_across_modules(tmp_path) -> None:
     from cochem_mage_telemetry import MageTelemetryBridge
     from cochem_mage_main import MAGEOrchestrator
 
@@ -191,7 +194,7 @@ def test_provenance_tagging_across_modules(tmp_path):
     assert os.path.exists(res_path)
 
 
-def test_config_sanitization_and_saving(tmp_path):
+def test_config_sanitization_and_saving(tmp_path) -> None:
     from cochem_mage_config import MAGEConfig
     cfg_path = str(tmp_path / "nested_dir" / "custom_config.json")
     cfg = MAGEConfig(config_file=cfg_path)
@@ -199,15 +202,16 @@ def test_config_sanitization_and_saving(tmp_path):
     # Verify defaults sanitized on init
     assert cfg.get("defaults", {}).get("t1_method") == "r2SCAN-3c"
     
-    # Test updating with prohibited legacy functional/basis
-    cfg.update_from_dict({"defaults": {"t1_method": "B3LYP", "default_basis": "6-31G*"}})
+    # Test updating with prohibited legacy functional/basis/method
+    cfg.update_from_dict({"defaults": {"t1_method": "B3LYP", "default_basis": "6-31G*", "t3_geometry": "DLPNO-CCSD(T)"}})
     
-    # Verify sanitization stripped B3LYP and set v4 defaults
+    # Verify sanitization stripped B3LYP/DLPNO-CCSD(T) and set v4 defaults
     assert cfg.get("defaults", {}).get("t1_method") == "r2SCAN-3c"
+    assert cfg.get("defaults", {}).get("t3_geometry") == "CCSD(T)-F12"
     assert "default_basis" not in cfg.get("defaults", {})
     assert os.path.exists(cfg_path)
 
-def test_hdf5_consecutive_export_no_collision(tmp_path):
+def test_hdf5_consecutive_export_no_collision(tmp_path) -> None:
     from cochem_mage_main import MAGEOrchestrator
     orchestrator = MAGEOrchestrator()
     h5_file = str(tmp_path / "consecutive_test.h5")
@@ -221,7 +225,7 @@ def test_hdf5_consecutive_export_no_collision(tmp_path):
     assert os.path.exists(res1)
     assert os.path.exists(res2)
 
-def test_determine_product_class_robustness_and_precedence():
+def test_determine_product_class_robustness_and_precedence() -> None:
     from cochem_mage_sim import determine_product_class
     
     # Non-dict inputs
@@ -237,7 +241,7 @@ def test_determine_product_class_robustness_and_precedence():
     assert res_diff_parent["product_class"] == "PRODUCT_C"
     assert res_diff_parent["recommended_tier"] == "T1-1h"
 
-def test_van_deemter_hetp_boundary_guards():
+def test_van_deemter_hetp_boundary_guards() -> None:
     from cochem_mage_sim import MageChromatographySim
     sim = MageChromatographySim({"length_m": 30.0, "stationary_phase": "DB-5"})
     
@@ -263,7 +267,7 @@ def test_van_deemter_hetp_boundary_guards():
     assert hetp_u_neg > 0.0
     assert u_clamped > 0.0
 
-def test_tpgc_peak_width_boundary_guards():
+def test_tpgc_peak_width_boundary_guards() -> None:
     import numpy as np
     from cochem_mage_opt import MageOptimizationEngine
     opt = MageOptimizationEngine()
@@ -284,7 +288,7 @@ def test_tpgc_peak_width_boundary_guards():
     assert not np.isnan(w_zero_dt)
     assert w_zero_dt > 0.0
 
-def test_parquet_and_dag_compiler_input_guards():
+def test_parquet_and_dag_compiler_input_guards() -> None:
     from cochem_mage_export import MageExporter
     exporter = MageExporter()
     df_empty = exporter.export_to_parquet(None)
@@ -296,7 +300,7 @@ def test_parquet_and_dag_compiler_input_guards():
     assert dag_none["total_steps"] == 10
     assert dag_none["molecule"] == "Unknown"
 
-def test_fragmenter_invalid_smiles_and_none_graph():
+def test_fragmenter_invalid_smiles_and_none_graph() -> None:
     from mage_fragmenter import MageFragmenter
     frag = MageFragmenter()
     

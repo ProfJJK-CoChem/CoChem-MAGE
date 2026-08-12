@@ -1,3 +1,6 @@
+import logging
+from typing import Any
+logger = logging.getLogger(__name__)
 # %%
 import os
 import sqlite3
@@ -19,11 +22,11 @@ class MageDescriptorCache:
         "Aromatic Halide": Chem.MolFromSmarts("c[F,Cl,Br,I]")
     }
 
-    def __init__(self, db_path="mage_descriptors.db"):
+    def __init__(self, db_path="mage_descriptors.db") -> None:
         self.db_path = db_path
         self._init_db()
 
-    def _init_db(self):
+    def _init_db(self) -> Any:
         """Initializes or expands the SQLite cache table with new schema elements."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -42,21 +45,21 @@ class MageDescriptorCache:
         conn.commit()
         conn.close()
 
-    def _get_chemical_class(self, mol):
+    def _get_chemical_class(self, mol) -> Any:
         """Tags the molecule based on the highest priority SMARTS match."""
         for name, pattern in self.SMARTS_PATTERNS.items():
             if mol.HasSubstructMatch(pattern):
                 return name
         return "Aliphatic/Unclassified"
 
-    def _estimate_ccs(self, mol, mw):
+    def _estimate_ccs(self, mol, mw) -> Any:
         """
         Topological proxy for Collisional Cross Section (CCS) in Å^2.
         Rough empirical scaling based on exact molecular weight and atomic topology.
         """
         return round((mw * 0.8) + 40.0, 2)
 
-    def _compute_physics(self, smiles, mol):
+    def _compute_physics(self, smiles, mol) -> Any:
         """Calculates internal and physical parameters for novel structures."""
         mw = Descriptors.ExactMolWt(mol)
         logp = Crippen.MolLogP(mol)
@@ -67,7 +70,7 @@ class MageDescriptorCache:
         return {"mw": mw, "logp": logp, "tpsa": tpsa, "ccs": ccs, 
                 "chemical_class": chem_class, "status": "COMPUTED"}
 
-    def get_or_compute(self, smiles, mol):
+    def get_or_compute(self, smiles, mol) -> Any:
         """Checks SQLite for existing descriptors before invoking RDKit."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -90,14 +93,14 @@ class MageDescriptorCache:
             ''', (smiles, props["mw"], props["logp"], props["tpsa"], props["ccs"], props["chemical_class"], props["status"]))
             conn.commit()
         except Exception as e:
-            print(f"⚠️ Physics Generation Failed for {smiles}: {e}")
+            logger.error(f"⚠️ Physics Generation Failed for {smiles}: {e}")
             props = {"mw": 0.0, "logp": 0.0, "tpsa": 0.0, "ccs": 0.0, "chemical_class": "ERROR", "status": "FAILED_PHYSICS"}
         finally:
             conn.close()
             
         return props
 
-    def process_batch(self, job_queue):
+    def process_batch(self, job_queue) -> Any:
         """Processes the full ingestion queue."""
         processed_queue = []
         for job in job_queue:
@@ -128,6 +131,6 @@ if __name__ == "__main__":
     mock_job = [{"smiles": smi, "rdkit_mol": Chem.MolFromSmiles(smi), "status": "SANITIZED"}]
     
     result = cache.process_batch(mock_job)
-    print(f"\\n🧪 Processed Job: {result[0]['smiles']}")
-    print(f"Class: {result[0]['chemical_class']} | CCS Proxy: {result[0]['ccs']} Å² | Status: {result[0]['status']}")
+    logger.info(f"\\n🧪 Processed Job: {result[0]['smiles']}")
+    logger.info(f"Class: {result[0]['chemical_class']} | CCS Proxy: {result[0]['ccs']} Å² | Status: {result[0]['status']}")
 # %%

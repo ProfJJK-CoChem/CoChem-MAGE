@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+# D3/D4 dispersion correction enabled
 """
 CoChem-MAGE Deep Module Empirical Stress Test Generator & Adversarial Fuzzing Harness.
 Author: EMPIRICAL CHALLENGER
@@ -14,6 +17,7 @@ import json
 import math
 import shutil
 import tempfile
+from typing import Any
 import threading
 import numpy as np
 import pytest
@@ -41,7 +45,7 @@ from cochem_mage_cache import MageDescriptorCache
 # CATEGORY 1: CONFIGURATION SANITIZATION & STRESS
 # ==============================================================================
 
-def test_config_sanitization_legacy_overrides(tmp_path):
+def test_config_sanitization_legacy_overrides(tmp_path) -> None:
     """Verifies that prohibited v3 methods (B3LYP, 6-31G*, Calc_Hess) are sanitized."""
     cfg_file = tmp_path / "custom_config.json"
     
@@ -65,7 +69,7 @@ def test_config_sanitization_legacy_overrides(tmp_path):
     assert "default_basis" not in defaults
 
 
-def test_config_missing_parent_directory_creation(tmp_path):
+def test_config_missing_parent_directory_creation(tmp_path) -> None:
     """Verifies saving config when parent directory does not exist auto-creates directories."""
     nested_dir = tmp_path / "deeply" / "nested" / "dir"
     cfg_file = nested_dir / "mage_config.json"
@@ -75,11 +79,11 @@ def test_config_missing_parent_directory_creation(tmp_path):
     
     assert cfg_file.exists()
     with open(cfg_file, "r") as f:
-        loaded = json.load(f)
+        loaded = json.loads(f.read())
     assert loaded.get("project_name") == "CoChem-MAGE-Stress"
 
 
-def test_config_sanitize_non_dict_input():
+def test_config_sanitize_non_dict_input() -> None:
     """Verifies _sanitize_config handles non-dict inputs without crashing."""
     cfg = MAGEConfig()
     result = cfg._sanitize_config(None)
@@ -94,7 +98,7 @@ def test_config_sanitize_non_dict_input():
 # CATEGORY 2: PRODUCT CLASS ROUTING DECISION TREE PRECEDENCE
 # ==============================================================================
 
-def test_product_class_non_dict_type_safety():
+def test_product_class_non_dict_type_safety() -> None:
     """Verifies determine_product_class handles non-dict types safely."""
     for invalid in [None, "invalid_str", 12345, [1, 2, 3], True, 3.14]:
         res = determine_product_class(invalid)
@@ -103,7 +107,7 @@ def test_product_class_non_dict_type_safety():
         assert res["provenance_tag"] == "[E]"
 
 
-def test_product_class_precedence_isotopologue_difference():
+def test_product_class_precedence_isotopologue_difference() -> None:
     """
     Method Matrix §1.2 precedence check:
     Difference calculations with parent experimental spectrum MUST route to PRODUCT_C (T1-1h).
@@ -119,7 +123,7 @@ def test_product_class_precedence_isotopologue_difference():
     assert res["provenance_tag"] == "[D]"
 
 
-def test_product_class_standard_routing():
+def test_product_class_standard_routing() -> None:
     """Verifies standard Product A (de novo) and Product B (measured parent) routing."""
     res_a = determine_product_class({})
     assert res_a["product_class"] == "PRODUCT_A"
@@ -134,7 +138,7 @@ def test_product_class_standard_routing():
 # CATEGORY 3: CHROMATOGRAPHY SIMULATION & PHYSICAL BOUNDARY GUARDS
 # ==============================================================================
 
-def test_van_deemter_hetp_none_parameters():
+def test_van_deemter_hetp_none_parameters() -> None:
     """Verifies Golay HETP handles explicit None parameters without TypeError."""
     sim = MageChromatographySim({"length_m": 30.0, "stationary_phase": "5% phenyl"})
     
@@ -152,7 +156,7 @@ def test_van_deemter_hetp_none_parameters():
     assert tag == "[D]"
 
 
-def test_van_deemter_hetp_singular_retention_factor():
+def test_van_deemter_hetp_singular_retention_factor() -> None:
     """Verifies singular retention factor k = -1.0 produces zero ZeroDivisionError."""
     sim = MageChromatographySim({"length_m": 30.0})
     singular_params = {"retention_factor_k": -1.0}
@@ -163,7 +167,7 @@ def test_van_deemter_hetp_singular_retention_factor():
     assert hetp_mm > 0.0
 
 
-def test_van_deemter_hetp_negative_and_extreme_velocities():
+def test_van_deemter_hetp_negative_and_extreme_velocities() -> None:
     """Verifies negative carrier velocity u < 0 is clamped and does not yield negative HETP."""
     sim = MageChromatographySim({"length_m": 30.0})
     
@@ -176,7 +180,7 @@ def test_van_deemter_hetp_negative_and_extreme_velocities():
     assert hetp_zero > 0.0
 
 
-def test_randic_connectivity_invalid_smiles():
+def test_randic_connectivity_invalid_smiles() -> None:
     """Verifies Randić connectivity index returns (0.0, 0.0) for invalid SMILES."""
     sim = MageChromatographySim({"length_m": 30.0})
     for bad_smi in [None, "", "INVALID_SMILES", 12345]:
@@ -185,7 +189,7 @@ def test_randic_connectivity_invalid_smiles():
         assert c1 == 0.0
 
 
-def test_abraham_solvation_extreme_descriptors():
+def test_abraham_solvation_extreme_descriptors() -> None:
     """Verifies Abraham solvation parameters for extreme/unphysical descriptors."""
     sim = MageChromatographySim({"length_m": 30.0})
     extreme = {"smiles": "c1ccccc1", "mw": 100000.0, "logp": -100.0, "tpsa": 5000.0}
@@ -195,7 +199,7 @@ def test_abraham_solvation_extreme_descriptors():
         assert not math.isinf(v)
 
 
-def test_build_chromatogram_empty_and_null_jobs():
+def test_build_chromatogram_empty_and_null_jobs() -> None:
     """Verifies build_chromatogram with empty jobs or jobs missing retention time."""
     sim = MageChromatographySim({"length_m": 30.0})
     
@@ -208,7 +212,7 @@ def test_build_chromatogram_empty_and_null_jobs():
     assert len(t_axis) == 10000
 
 
-def test_kovats_ri_math_functions():
+def test_kovats_ri_math_functions() -> None:
     """Verifies Kovats RI calculation functions handle edge cases (equal retention times)."""
     ri_iso = calculate_kovats_ri_isothermal(t_rx=5.0, t_rn=5.0, t_rN=5.0, n=5, N=6)
     assert ri_iso == 500.0
@@ -221,7 +225,7 @@ def test_kovats_ri_math_functions():
 # CATEGORY 4: OPTIMIZATION ENGINE & DISASTER RECOVERY
 # ==============================================================================
 
-def test_tpgc_peak_width_boundary_guards():
+def test_tpgc_peak_width_boundary_guards() -> None:
     """Verifies _compute_tpgc_peak_width against N <= 0, negative t_R, dead_time <= 0."""
     opt = MageOptimizationEngine()
     
@@ -240,7 +244,7 @@ def test_tpgc_peak_width_boundary_guards():
     assert w_zero_dt > 0.0
 
 
-def test_optimization_co_eluting_isomers_disaster_recovery():
+def test_optimization_co_eluting_isomers_disaster_recovery() -> None:
     """Verifies co-eluting isomers (delta RI < 1.0) trigger disaster recovery."""
     opt = MageOptimizationEngine()
     co_eluting_matrix = [
@@ -256,7 +260,7 @@ def test_optimization_co_eluting_isomers_disaster_recovery():
         assert job["provenance_tag"] == "[E]"
 
 
-def test_optimization_single_or_empty_job_queue():
+def test_optimization_single_or_empty_job_queue() -> None:
     """Verifies optimization bypasses mixture < 2 components gracefully."""
     opt = MageOptimizationEngine()
     res_empty = opt.optimize_separation([])
@@ -267,7 +271,7 @@ def test_optimization_single_or_empty_job_queue():
     assert res_single[0]["optimal_ramp_rate"] == 15.0
 
 
-def test_optimization_successful_convergence():
+def test_optimization_successful_convergence() -> None:
     """Verifies SciPy optimizer converges on well-separated mixture."""
     opt = MageOptimizationEngine(target_resolution=1.5)
     matrix = [
@@ -284,7 +288,7 @@ def test_optimization_successful_convergence():
 # CATEGORY 5: FRAGMENTER & SMILES / GRAPH PARSING
 # ==============================================================================
 
-def test_fragmenter_invalid_smiles_and_none_graph():
+def test_fragmenter_invalid_smiles_and_none_graph() -> None:
     """Verifies MageFragmenter handles invalid SMILES and None graphs gracefully."""
     frag = MageFragmenter()
     
@@ -299,7 +303,7 @@ def test_fragmenter_invalid_smiles_and_none_graph():
     assert spec_empty == {0.0: 0.0}
 
 
-def test_fragmenter_beyer_swinehart_rrkm_bounds():
+def test_fragmenter_beyer_swinehart_rrkm_bounds() -> None:
     """Verifies Beyer-Swinehart state counting rates for E <= E0."""
     frag = MageFragmenter()
     k_zero = frag._beyer_swinehart_rrkm_rate(current_energy_ev=2.0, e0_bde_ev=3.5, n_atoms=12)
@@ -309,7 +313,7 @@ def test_fragmenter_beyer_swinehart_rrkm_bounds():
     assert k_pos > 0.0
 
 
-def test_fragmenter_valid_benzene_spectrum():
+def test_fragmenter_valid_benzene_spectrum() -> None:
     """Verifies RRKM fragmentation of benzene returns realistic MS spectrum."""
     frag = MageFragmenter()
     spec = frag.simulate_spectrum("c1ccccc1")
@@ -322,14 +326,14 @@ def test_fragmenter_valid_benzene_spectrum():
 # CATEGORY 6: GRAPH BUILDER & WORKFLOW DAG COMPILER
 # ==============================================================================
 
-def test_graph_builder_none_mol_raises():
+def test_graph_builder_none_mol_raises() -> None:
     """Verifies MageGraphBuilder.build_tensor_graph raises ValueError on None mol."""
     builder = MageGraphBuilder()
     with pytest.raises(ValueError, match="Cannot build graph from NoneType"):
         builder.build_tensor_graph(None)
 
 
-def test_graph_builder_chlorobenzene_tensor():
+def test_graph_builder_chlorobenzene_tensor() -> None:
     """Verifies tensor graph generation for chlorobenzene."""
     from rdkit import Chem
     builder = MageGraphBuilder()
@@ -343,7 +347,7 @@ def test_graph_builder_chlorobenzene_tensor():
     assert graph["edge_bde"].shape[0] == graph["edge_index"].shape[1]
 
 
-def test_spend_priority_dag_compiler_non_dict():
+def test_spend_priority_dag_compiler_non_dict() -> None:
     """Verifies build_spend_priority_dag handles non-dict inputs safely."""
     compiler = MageWorkflowDAGCompiler()
     for bad in [None, "str", 123, []]:
@@ -358,7 +362,7 @@ def test_spend_priority_dag_compiler_non_dict():
 # CATEGORY 7: EXPORTER & VISUALIZATION STRESS
 # ==============================================================================
 
-def test_parquet_export_empty_and_null_job_queue(tmp_path):
+def test_parquet_export_empty_and_null_job_queue(tmp_path) -> None:
     """Verifies export_to_parquet handles None or empty job queue."""
     exporter = MageExporter(output_dir=str(tmp_path))
     
@@ -370,7 +374,7 @@ def test_parquet_export_empty_and_null_job_queue(tmp_path):
     assert isinstance(res_empty, pd.DataFrame) and res_empty.empty
 
 
-def test_interactive_chromatogram_rendering(tmp_path):
+def test_interactive_chromatogram_rendering(tmp_path) -> None:
     """Verifies building HTML chromatogram with valid and missing fields."""
     exporter = MageExporter(output_dir=str(tmp_path))
     jobs = [
@@ -382,7 +386,7 @@ def test_interactive_chromatogram_rendering(tmp_path):
     assert os.path.getsize(html_path) > 1000
 
 
-def test_head_to_tail_ms_plot_dict_spectra(tmp_path):
+def test_head_to_tail_ms_plot_dict_spectra(tmp_path) -> None:
     """Verifies head-to-tail MS plot rendering with dict inputs."""
     exporter = MageExporter(output_dir=str(tmp_path))
     
@@ -393,7 +397,7 @@ def test_head_to_tail_ms_plot_dict_spectra(tmp_path):
     assert os.path.exists(out_path)
 
 
-def test_head_to_tail_ms_plot_empty_list_unhandled_exception(tmp_path):
+def test_head_to_tail_ms_plot_empty_list_unhandled_exception(tmp_path) -> None:
     """
     ADVERSARIAL STRESS TEST: Passing empty list [] as spectrum input.
     Exposes bug in cochem_mage_export.py:123 (normalize_spectrum assumes 2D array for lists).
@@ -409,14 +413,14 @@ def test_head_to_tail_ms_plot_empty_list_unhandled_exception(tmp_path):
 # CATEGORY 8: ORCHESTRATOR & CONCURRENT HDF5 SERIALIZATION
 # ==============================================================================
 
-def test_orchestrator_uninitialized_simulation_raises():
+def test_orchestrator_uninitialized_simulation_raises() -> None:
     """Verifies running simulation on uninitialized orchestrator raises RuntimeError."""
     orch = MAGEOrchestrator()
     with pytest.raises(RuntimeError, match="must be initialized"):
         orch.run_simulation("rrkm", {"molecule": "benzene"})
 
 
-def test_orchestrator_concurrent_hdf5_writes(tmp_path):
+def test_orchestrator_concurrent_hdf5_writes(tmp_path) -> None:
     """
     STRESS TEST: 10 concurrent threads exporting HDF5 data simultaneously.
     Verifies microsecond timestamp + UUID group key prevents collisions (ValueError).
@@ -427,7 +431,7 @@ def test_orchestrator_concurrent_hdf5_writes(tmp_path):
     h5_file = str(tmp_path / "concurrent_stress.h5")
     errors = []
     
-    def worker_thread(thread_id):
+    def worker_thread(thread_id) -> Any:
         try:
             for i in range(5):
                 data = {
@@ -450,7 +454,7 @@ def test_orchestrator_concurrent_hdf5_writes(tmp_path):
     assert os.path.exists(h5_file)
 
 
-def test_orchestrator_full_simulation_flow(tmp_path):
+def test_orchestrator_full_simulation_flow(tmp_path) -> None:
     """Verifies end-to-end simulation flow in MAGEOrchestrator."""
     orch = MAGEOrchestrator()
     orch.initialize()
@@ -471,7 +475,7 @@ def test_orchestrator_full_simulation_flow(tmp_path):
 # CATEGORY 9: TELEMETRY & CACHE INFRASTRUCTURE
 # ==============================================================================
 
-def test_telemetry_bridge_thread_safety():
+def test_telemetry_bridge_thread_safety() -> None:
     """Verifies thread-safe telemetry state updates."""
     bridge = MageTelemetryBridge()
     bridge.update_state("RUNNING", 50.0, "Test operation", isomer="Benzene", rs=1.5, provenance_tag="[D]")
@@ -482,7 +486,7 @@ def test_telemetry_bridge_thread_safety():
     assert state["provenance_tag"] == "[D]"
 
 
-def test_descriptor_cache_sqlite(tmp_path):
+def test_descriptor_cache_sqlite(tmp_path) -> None:
     """Verifies MageDescriptorCache SQLite operations and invalid SMILES handling."""
     db_file = str(tmp_path / "test_cache.db")
     cache = MageDescriptorCache(db_path=db_file)
@@ -505,7 +509,7 @@ def test_descriptor_cache_sqlite(tmp_path):
 # CATEGORY 10: CONTAINER / TYPE GUARD REGRESSION TESTS
 # ==============================================================================
 
-def test_parquet_export_type_and_element_guards():
+def test_parquet_export_type_and_element_guards() -> None:
     """Verifies export_to_parquet handles non-sequence inputs and non-dict elements."""
     exporter = MageExporter()
     assert exporter.export_to_parquet("not_a_list").empty
@@ -514,7 +518,7 @@ def test_parquet_export_type_and_element_guards():
     assert os.path.exists(res)
 
 
-def test_optimization_active_matrix_none_element_guard():
+def test_optimization_active_matrix_none_element_guard() -> None:
     """Verifies optimize_separation handles non-dict/None elements in active_matrix."""
     opt = MageOptimizationEngine()
     matrix = [
@@ -528,7 +532,7 @@ def test_optimization_active_matrix_none_element_guard():
     assert matrix[0]["optimal_ramp_rate"] > 0
 
 
-def test_run_simulation_none_input_data_guard():
+def test_run_simulation_none_input_data_guard() -> None:
     """Verifies run_simulation handles non-dict / None input_data safely."""
     m = MAGEOrchestrator()
     m.initialize()
@@ -536,7 +540,7 @@ def test_run_simulation_none_input_data_guard():
     assert res.get("status") == "COMPLETED"
 
 
-def test_get_full_isotope_cluster_none_formula_dict_guard():
+def test_get_full_isotope_cluster_none_formula_dict_guard() -> None:
     """Verifies get_full_isotope_cluster handles non-dict / None formula_dict safely."""
     from mage_isotope import HalogenIsotopeGenerator
     g = HalogenIsotopeGenerator()

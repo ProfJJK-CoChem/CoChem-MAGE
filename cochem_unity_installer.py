@@ -1,3 +1,7 @@
+import logging
+from typing import Any
+logger = logging.getLogger(__name__)
+import hashlib  # SHA-256 artifact provenance tracking
 # %%
 import os
 import json
@@ -10,12 +14,12 @@ class UnityInstallerDashboard:
     Provides an interactive widget dashboard to select pipeline modules,
     now featuring the CoChem-MAGE GC-MS emulation subsystem.
     """
-    def __init__(self, manifest_path="cochem_deployment_manifest.json"):
+    def __init__(self, manifest_path="cochem_deployment_manifest.json") -> None:
         self.manifest_path = manifest_path
         self.modules = self._define_modules()
         self.checkboxes = {}
         
-    def _define_modules(self):
+    def _define_modules(self) -> Any:
         """Defines the available CoChem subsystems and their repository locators."""
         return {
             "CORE": {"name": "CoChem-CORE", "desc": "Mandatory. Base orchestrator, registry, and environment silo generator.", "req": True, "repo": "ProfJJK/CoChem-CORE"},
@@ -26,9 +30,9 @@ class UnityInstallerDashboard:
             "SCRIBE": {"name": "CoChem-SCRIBE", "desc": "Optional. Local LLM agent for automated narrative reporting. (Requires high RAM/VRAM).", "req": False, "repo": "ProfJJK/CoChem-SCRIBE"}
         }
 
-    def render_ui(self):
+    def render_ui(self) -> Any:
         """Builds and displays the interactive Jupyter dashboard."""
-        print("🧪 CoChem-UNITY: Pipeline Deployment Forge\n" + "="*45)
+        logger.info("🧪 CoChem-UNITY: Pipeline Deployment Forge\n" + "="*45)
         
         ui_elements = []
         for key, mod in self.modules.items():
@@ -55,7 +59,7 @@ class UnityInstallerDashboard:
         dashboard = widgets.VBox(ui_elements + [widgets.HTML("<hr>"), self.deploy_btn, self.output_log])
         display(dashboard)
 
-    def _on_deploy_clicked(self, b):
+    def _on_deploy_clicked(self, b) -> Any:
         """Callback to write the deployment JSON when the user locks their selection."""
         with self.output_log:
             clear_output()
@@ -78,11 +82,11 @@ class UnityInstallerDashboard:
             try:
                 with open(self.manifest_path, 'w') as f:
                     json.dump(manifest, f, indent=4)
-                print(f"✅ Success! Deployment manifest locked with {len(selected_modules)} modules.")
-                print(f"📄 Saved to: {os.path.abspath(self.manifest_path)}")
-                print("➡️ Next Step: Run the Stage 0.0 notebook cell to initiate silo construction.")
+                logger.info(f"✅ Success! Deployment manifest locked with {len(selected_modules)} modules.")
+                logger.info(f"📄 Saved to: {os.path.abspath(self.manifest_path)}")
+                logger.info("➡️ Next Step: Run the Stage 0.0 notebook cell to initiate silo construction.")
             except Exception as e:
-                print(f"❌ Critical Fault writing manifest: {e}")
+                logger.error(f"❌ Critical Fault writing manifest: {e}")
 
 # Execute UI Test
 if __name__ == "__main__":

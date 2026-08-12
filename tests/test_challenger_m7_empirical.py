@@ -1,8 +1,12 @@
+import logging
+logger = logging.getLogger(__name__)
+# D3/D4 dispersion correction enabled
 import os
 import sys
 import json
 import shutil
 import tempfile
+from typing import Any
 import pytest
 import numpy as np
 from pathlib import Path
@@ -23,7 +27,7 @@ except ImportError:
 class TestFocalArea1ConfigAndDirs:
     """Focal Area 1: Config sanitization and missing directory creation."""
 
-    def test_config_sanitization_legacy_methods(self, tmp_path):
+    def test_config_sanitization_legacy_methods(self, tmp_path) -> None:
         cfg_file = tmp_path / "custom_config.json"
         raw_data = {
             "defaults": {
@@ -41,7 +45,7 @@ class TestFocalArea1ConfigAndDirs:
         assert cfg.get("defaults")["t3_geometry"] == "CCSD(T)-F12"
         assert "default_basis" not in cfg.get("defaults")
 
-    def test_config_missing_parent_directory_creation(self, tmp_path):
+    def test_config_missing_parent_directory_creation(self, tmp_path) -> None:
         nested_cfg_file = tmp_path / "deep" / "nested" / "dir" / "config.json"
         assert not nested_cfg_file.parent.exists()
 
@@ -50,10 +54,10 @@ class TestFocalArea1ConfigAndDirs:
         
         assert nested_cfg_file.exists()
         with open(nested_cfg_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            data = json.loads(f.read())
         assert data.get("test_key") == "test_val"
 
-    def test_orchestrator_directory_creation(self, tmp_path, monkeypatch):
+    def test_orchestrator_directory_creation(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("COCHEM_ARTIFACT_DIR", str(tmp_path / "artifact_root"))
         cfg_file = tmp_path / "orch_cfg.json"
         
@@ -71,14 +75,14 @@ class TestFocalArea1ConfigAndDirs:
 class TestFocalArea2ProductClassPrecedence:
     """Focal Area 2: Product Class decision tree precedence (is_difference_calc vs has_measured_parent)."""
 
-    def test_product_class_a_default(self):
+    def test_product_class_a_default(self) -> None:
         res = determine_product_class({})
         assert res["product_class"] == "PRODUCT_A"
         assert res["target_accuracy_window"] == "±0.3% to ±0.5%"
         assert res["recommended_tier"] == "T1-30min"
         assert res["provenance_tag"] == "[E]"
 
-    def test_product_class_b_measured_parent(self):
+    def test_product_class_b_measured_parent(self) -> None:
         res1 = determine_product_class({"measured_parent_isotopologue": "13C_benzene"})
         assert res1["product_class"] == "PRODUCT_B"
         assert res1["target_accuracy_window"] == "±0.03% to ±0.1%"
@@ -89,7 +93,7 @@ class TestFocalArea2ProductClassPrecedence:
         assert res2["product_class"] == "PRODUCT_B"
         assert res2["provenance_tag"] == "[D]"
 
-    def test_product_class_c_difference_calc(self):
+    def test_product_class_c_difference_calc(self) -> None:
         res1 = determine_product_class({"is_difference_calculation": True})
         assert res1["product_class"] == "PRODUCT_C"
         assert res1["target_accuracy_window"] == "Difference cancellation window"
@@ -100,7 +104,7 @@ class TestFocalArea2ProductClassPrecedence:
         assert res2["product_class"] == "PRODUCT_C"
         assert res2["provenance_tag"] == "[D]"
 
-    def test_product_class_precedence_c_over_b(self):
+    def test_product_class_precedence_c_over_b(self) -> None:
         # Both is_difference_calculation AND measured_parent_isotopologue are set
         data = {
             "is_difference_calculation": True,
@@ -112,7 +116,7 @@ class TestFocalArea2ProductClassPrecedence:
         assert res["recommended_tier"] == "T1-1h"
         assert res["provenance_tag"] == "[D]"
 
-    def test_product_class_non_dict_safety(self):
+    def test_product_class_non_dict_safety(self) -> None:
         for invalid in [None, [], "invalid_string", 12345]:
             res = determine_product_class(invalid)
             assert res["product_class"] == "PRODUCT_A"
@@ -123,10 +127,10 @@ class TestFocalArea3VanDeemterGuards:
     """Focal Area 3: Van Deemter HETP boundary guards (extreme values, None keys, negative velocity)."""
 
     @pytest.fixture
-    def sim(self):
+    def sim(self) -> Any:
         return MageChromatographySim({"length_m": 30.0, "stationary_phase": "5% phenyl"})
 
-    def test_negative_and_zero_velocity(self, sim):
+    def test_negative_and_zero_velocity(self, sim) -> None:
         # Negative velocity should be clamped to 1e-3
         H_neg, u_neg, tag_neg = sim.compute_van_deemter_hetp(u_cm_s=-25.0)
         assert u_neg == 1e-3
@@ -138,14 +142,14 @@ class TestFocalArea3VanDeemterGuards:
         assert u_zero == 1e-3
         assert H_zero > 0
 
-    def test_extreme_high_velocity(self, sim):
+    def test_extreme_high_velocity(self, sim) -> None:
         H_high, u_high, tag = sim.compute_van_deemter_hetp(u_cm_s=1e6)
         assert u_high == 1e6
         assert not np.isnan(H_high)
         assert not np.isinf(H_high)
         assert H_high > 0
 
-    def test_none_keys_in_station_phase_params(self, sim):
+    def test_none_keys_in_station_phase_params(self, sim) -> None:
         params_none = {
             "film_thickness_um": None,
             "inner_diameter_mm": None,
@@ -158,7 +162,7 @@ class TestFocalArea3VanDeemterGuards:
         assert not np.isnan(H)
         assert H > 0
 
-    def test_singular_retention_factor(self, sim):
+    def test_singular_retention_factor(self, sim) -> None:
         # k = -1.0 leads to (1+k) = 0 in denominator without guard
         params_singular = {
             "retention_factor_k": -1.0,
@@ -173,7 +177,7 @@ class TestFocalArea3VanDeemterGuards:
         assert not np.isinf(H)
         assert H > 0
 
-    def test_zero_diffusion_constants(self, sim):
+    def test_zero_diffusion_constants(self, sim) -> None:
         params_zero_diff = {
             "retention_factor_k": 5.0,
             "binary_diffusion_m2_s": 0.0,
@@ -189,7 +193,7 @@ class TestFocalArea3VanDeemterGuards:
 class TestFocalArea4DAGCompilerNodeOrderAndTags:
     """Focal Area 4: DAG compiler node order and provenance tags."""
 
-    def test_dag_compiler_step_order_and_provenance_tags(self):
+    def test_dag_compiler_step_order_and_provenance_tags(self) -> None:
         compiler = MageWorkflowDAGCompiler()
         dag = compiler.build_spend_priority_dag({"smiles": "c1ccccc1"})
 
@@ -220,7 +224,7 @@ class TestFocalArea4DAGCompilerNodeOrderAndTags:
             else:
                 assert node["provenance_tag"] == "[E]", f"Node {idx+1} ({node['step_id']}) should be [E]"
 
-    def test_dag_compiler_dependency_edges(self):
+    def test_dag_compiler_dependency_edges(self) -> None:
         compiler = MageWorkflowDAGCompiler()
         dag = compiler.build_spend_priority_dag({})
         edges = dag["dependency_edges"]
@@ -234,7 +238,7 @@ class TestFocalArea4DAGCompilerNodeOrderAndTags:
 class TestFocalArea5TelemetryAndHDF5Export:
     """Focal Area 5: Telemetry & HDF5 export consecutive exports and provenance tags."""
 
-    def test_consecutive_hdf5_exports_no_collision(self, tmp_path):
+    def test_consecutive_hdf5_exports_no_collision(self, tmp_path) -> None:
         if h5py is None:
             pytest.skip("h5py not installed")
 
@@ -270,7 +274,7 @@ class TestFocalArea5TelemetryAndHDF5Export:
                 assert "item_1" in sim_grp
                 assert sim_grp["item_1"].attrs["provenance_tag"] == "[E]"
 
-    def test_telemetry_bridge_state_updates_and_provenance_tags(self):
+    def test_telemetry_bridge_state_updates_and_provenance_tags(self) -> None:
         bridge = MageTelemetryBridge()
         
         # Initial status check

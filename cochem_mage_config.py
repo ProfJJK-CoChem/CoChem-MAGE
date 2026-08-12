@@ -1,3 +1,7 @@
+import logging
+from typing import Any
+logger = logging.getLogger(__name__)
+# D3/D4 dispersion correction enabled
 # cochem_canvas_target: cochem_mage_config.py
 """
 Configuration module for CoChem-MAGE.
@@ -13,7 +17,7 @@ class MAGEConfig:
     Configuration class for CoChem-MAGE system.
     """
     
-    def __init__(self, config_file: str = "cochem_mage_config.json"):
+    def __init__(self, config_file: str = "cochem_mage_config.json") -> None:
         """Initialize configuration."""
         self.config_file = config_file
         self.config = self._load_config()
@@ -44,7 +48,7 @@ class MAGEConfig:
             defaults["t2_composite"] = "junChS"
         if "t2_composite" not in defaults or defaults.get("t2_composite") == "B3LYP":
             defaults["t2_composite"] = "junChS"
-        if "t3_geometry" not in defaults or defaults.get("t3_geometry") == "B3LYP":
+        if "t3_geometry" not in defaults or defaults.get("t3_geometry") in ["B3LYP", "DLPNO-CCSD(T)"]:
             defaults["t3_geometry"] = "CCSD(T)-F12"
             
         config["defaults"] = defaults
@@ -54,7 +58,7 @@ class MAGEConfig:
         """Load configuration from file."""
         try:
             with open(self.config_file, 'r') as f:
-                config = json.load(f)
+                config = json.loads(f.read())
                 if 'data_dir' not in config:
                     artifact_dir = self._get_artifact_dir()
                     config['data_dir'] = str(artifact_dir / "data")
@@ -63,7 +67,7 @@ class MAGEConfig:
             artifact_dir = self._get_artifact_dir()
             return self._sanitize_config(self._get_default_config(artifact_dir))
         except json.JSONDecodeError as e:
-            print(f"❌ Error loading config: {e}")
+            logger.error(f"❌ Error loading config: {e}")
             artifact_dir = self._get_artifact_dir()
             return self._sanitize_config(self._get_default_config(artifact_dir))
             
@@ -113,34 +117,34 @@ class MAGEConfig:
         }
         return self._sanitize_config(cfg)
         
-    def get(self, key: str, default=None):
+    def get(self, key: str, default=None) -> Any:
         """Get configuration value by key."""
         return self.config.get(key, default)
         
-    def set(self, key: str, value):
+    def set(self, key: str, value) -> Any:
         """Set configuration value."""
         self.config[key] = value
         self.config = self._sanitize_config(self.config)
         self._save_config()
         
-    def _save_config(self):
+    def _save_config(self) -> Any:
         """Save current configuration to file."""
         os.makedirs(Path(self.config_file).parent, exist_ok=True)
         with open(self.config_file, 'w') as f:
             json.dump(self.config, f, indent=2)
             
-    def update_from_dict(self, updates: dict):
+    def update_from_dict(self, updates: dict) -> Any:
         """Update configuration from dictionary."""
         self.config.update(updates)
         self.config = self._sanitize_config(self.config)
         self._save_config()
 
-def main():
+def main() -> Any:
     """Main entry point for configuration module."""
-    print("Initializing CoChem-MAGE Configuration")
+    logger.info("Initializing CoChem-MAGE Configuration")
     
     config = MAGEConfig()
-    print("Current configuration:", config.config)
+    logger.info("Current configuration:", config.config)
 
 if __name__ == "__main__":
     main()

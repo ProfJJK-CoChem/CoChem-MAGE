@@ -1,3 +1,6 @@
+import logging
+from typing import Any
+logger = logging.getLogger(__name__)
 # %%
 import math
 from collections import defaultdict
@@ -39,14 +42,14 @@ class HalogenIsotopeGenerator:
     BR_DELTA = 1.99795
     BR_ABUNDANCE = {0: 0.5069, 1: 0.4931} # 79Br (50.69%), 81Br (49.31%)
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._cache = {}
 
-    def _binomial_probability(self, n, k, p_light, p_heavy):
+    def _binomial_probability(self, n, k, p_light, p_heavy) -> Any:
         coef = math.comb(n, k)
         return coef * (p_heavy ** k) * (p_light ** (n - k))
 
-    def _get_single_element_cluster(self, n_atoms, delta, p_light, p_heavy):
+    def _get_single_element_cluster(self, n_atoms, delta, p_light, p_heavy) -> Any:
         cluster = defaultdict(float)
         for k_heavy in range(n_atoms + 1):
             exact_shift = k_heavy * delta
@@ -54,7 +57,7 @@ class HalogenIsotopeGenerator:
             cluster[exact_shift] = prob
         return cluster
 
-    def get_full_isotope_cluster(self, formula_dict: dict):
+    def get_full_isotope_cluster(self, formula_dict: dict) -> Any:
         """
         Calculates isotope cluster distribution for general molecular formula dictionary.
         e.g. {'C': 6, 'H': 6, 'N': 1, 'O': 1, 'S': 0, 'Si': 0, 'Cl': 1, 'Br': 0}
@@ -96,7 +99,7 @@ class HalogenIsotopeGenerator:
         self._cache[cache_key] = normalized
         return normalized
 
-    def get_isotope_cluster(self, num_cl: int, num_br: int):
+    def get_isotope_cluster(self, num_cl: int, num_br: int) -> Any:
         """Backwards compatible interface for Cl/Br only."""
         return self.get_full_isotope_cluster({'Cl': num_cl, 'Br': num_br})
 # %%

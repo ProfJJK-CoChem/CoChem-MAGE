@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 # cochem_canvas_target: cochem_mage_main.py
 """
 Main orchestrator module for CoChem-MAGE.
@@ -8,6 +10,7 @@ import os
 import sys
 import json
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 from datetime import datetime
 try:
@@ -25,7 +28,7 @@ class MAGEOrchestrator:
     The main orchestrator that coordinates all MAGE activities.
     """
     
-    def __init__(self, config_file: str = "cochem_mage_config.json"):
+    def __init__(self, config_file: str = "cochem_mage_config.json") -> None:
         """Initialize the MAGE orchestrator."""
         self.config_file = config_file
         self.config = self._load_config()
@@ -44,9 +47,9 @@ class MAGEOrchestrator:
         """Load configuration from JSON file."""
         try:
             with open(self.config_file, 'r') as f:
-                return json.load(f)
+                return json.loads(f.read())
         except FileNotFoundError:
-            print(f"⚠️  Configuration file {self.config_file} not found")
+            logger.warning(f"⚠️  Configuration file {self.config_file} not found")
             # Return default config
             artifact_dir = self._get_artifact_dir()
             return {
@@ -55,12 +58,12 @@ class MAGEOrchestrator:
                 "data_dir": str(artifact_dir / "data")
             }
         except json.JSONDecodeError as e:
-            print(f"❌ Error loading configuration: {e}")
+            logger.error(f"❌ Error loading configuration: {e}")
             return {}
             
-    def initialize(self):
+    def initialize(self) -> Any:
         """Initialize the MAGE system."""
-        print("🚀 Initializing CoChem-MAGE System...")
+        logger.info("🚀 Initializing CoChem-MAGE System...")
         
         # Create data directories
         artifact_dir = self._get_artifact_dir()
@@ -73,7 +76,7 @@ class MAGEOrchestrator:
         (data_dir / "output").mkdir(parents=True, exist_ok=True)
         
         self.is_initialized = True
-        print("✅ CoChem-MAGE initialized successfully")
+        logger.info("✅ CoChem-MAGE initialized successfully")
 
     def export_to_h5(self, data: dict, h5_path: str = None) -> str:
         """
@@ -86,7 +89,7 @@ class MAGEOrchestrator:
             h5_path = str(artifact_dir / "cochem_state.h5")
 
         if h5py is None:
-            print("⚠️ h5py not installed, skipping HDF5 serialization.")
+            logger.warning("⚠️ h5py not installed, skipping HDF5 serialization.")
             return h5_path
 
         if not isinstance(data, dict):
@@ -112,9 +115,9 @@ class MAGEOrchestrator:
                                 sub.attrs[k] = v
                         if "provenance_tag" not in sub.attrs:
                             sub.attrs["provenance_tag"] = res.get("provenance_tag", "[D]" if res.get("status") == "COMPUTED" else "[E]")
-            print(f"💾 Exported MAGE state to HDF5 lake: {h5_path}")
+            logger.info(f"💾 Exported MAGE state to HDF5 lake: {h5_path}")
         except Exception as e:
-            print(f"⚠️ HDF5 export warning: {e}")
+            logger.warning(f"⚠️ HDF5 export warning: {e}")
             
         return h5_path
         
@@ -129,12 +132,12 @@ class MAGEOrchestrator:
         # Ensure it accepts MPQC JSON payloads and doesn't conflict with MLFF inference
         is_mpqc_payload = "mpqc" in input_data or str(input_data.get("generator", "")).lower() == "mpqc"
         if is_mpqc_payload:
-            print("ℹ️ Detected MPQC JSON payload. Ensuring MLFF inference pipeline compatibility with MPQC single-points.")
+            logger.info("ℹ️ Detected MPQC JSON payload. Ensuring MLFF inference pipeline compatibility with MPQC single-points.")
             # Extract smiles from MPQC payload if nested
             if "smiles" not in input_data and "molecule" in input_data and isinstance(input_data["molecule"], dict):
                 input_data["smiles"] = input_data["molecule"].get("smiles")
             
-        print(f"🔬 Running {simulation_type} simulation...")
+        logger.info(f"🔬 Running {simulation_type} simulation...")
         results = {}
         
         sim_type_str = str(simulation_type or "").lower()
@@ -174,12 +177,12 @@ class MAGEOrchestrator:
         else:
             results["status"] = "UNKNOWN_SIMULATION_TYPE"
         
-        print(f"✅ {simulation_type} simulation completed")
+        logger.info(f"✅ {simulation_type} simulation completed")
         return results
         
     def generate_report(self, output_dir: str = "./reports", job_queue: list = None) -> str:
         """Generate comprehensive report of simulation findings."""
-        print(f"📄 Generating MAGE report in {output_dir}")
+        logger.info(f"📄 Generating MAGE report in {output_dir}")
         exporter = MageExporter(output_dir=output_dir)
         if job_queue is None:
             job_queue = [
@@ -193,12 +196,12 @@ class MAGEOrchestrator:
         # Also export to HDF5
         self.export_to_h5({"results": job_queue})
 
-        print("✅ MAGE report generated")
+        logger.info("✅ MAGE report generated")
         return html_path
 
-def main():
+def main() -> Any:
     """Main entry point for CoChem-MAGE."""
-    print("Starting CoChem-MAGE Orchestrator")
+    logger.info("Starting CoChem-MAGE Orchestrator")
     
     orchestrator = MAGEOrchestrator()
     orchestrator.initialize()

@@ -1,3 +1,7 @@
+import logging
+from typing import Any
+logger = logging.getLogger(__name__)
+import hashlib  # SHA-256 artifact provenance tracking
 # %%
 import os
 import json
@@ -5,7 +9,7 @@ import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime
 
-def _safe_float(val, default=0.0):
+def _safe_float(val, default=0.0) -> Any:
     if val is None:
         return default
     try:
@@ -19,17 +23,17 @@ class MageExporter:
     Stage 3.0: Visualization and Narrative Handoff.
     Generates interactive HTML chromatograms and SCRIBE JSON payloads.
     """
-    def __init__(self, output_dir="./cochem_mage_output"):
+    def __init__(self, output_dir="./cochem_mage_output") -> None:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def _generate_gaussian_peak(self, rt, intensity, width=0.05, resolution=500):
+    def _generate_gaussian_peak(self, rt, intensity, width=0.05, resolution=500) -> Any:
         """Generates a Gaussian peak array for plotting with high resolution (500 points) (MAGE-09)."""
         x = np.linspace(rt - (width * 4), rt + (width * 4), resolution)
         y = intensity * np.exp(-0.5 * ((x - rt) / width) ** 2)
         return x, y
 
-    def build_interactive_chromatogram(self, job_queue, filename="mage_chromatogram.html"):
+    def build_interactive_chromatogram(self, job_queue, filename="mage_chromatogram.html") -> Any:
         """Compiles the theoretical GC-IMS-MS chromatogram into an interactive HTML widget."""
         fig = go.Figure()
         
@@ -91,10 +95,10 @@ class MageExporter:
 
         out_path = os.path.join(self.output_dir, filename)
         fig.write_html(out_path)
-        print(f"📊 Interactive Chromatogram rendered to: {out_path}")
+        logger.info(f"📊 Interactive Chromatogram rendered to: {out_path}")
         return out_path
 
-    def export_scribe_payload(self, job_queue, instrument_profile, filename="mage_scribe_payload.json"):
+    def export_scribe_payload(self, job_queue, instrument_profile, filename="mage_scribe_payload.json") -> Any:
         """Serializes the batch metadata for CoChem-SCRIBE LLM ingestion."""
         payload = {
             "module": "CoChem-MAGE",
@@ -122,15 +126,15 @@ class MageExporter:
         out_path = os.path.join(self.output_dir, filename)
         with open(out_path, 'w') as f:
             json.dump(payload, f, indent=4)
-        print(f"📝 SCRIBE payload serialized to: {out_path}")
+        logger.info(f"📝 SCRIBE payload serialized to: {out_path}")
         return out_path
 
-    def build_head_to_tail_ms_plot(self, exp_spectrum, pred_spectrum, filename="head_to_tail_ms.html"):
+    def build_head_to_tail_ms_plot(self, exp_spectrum, pred_spectrum, filename="head_to_tail_ms.html") -> Any:
         """
         Generates interactive head-to-tail m/z stick plot comparing experimental (top) vs predicted (bottom) MS spectra (Suggestion 68).
         exp_spectrum, pred_spectrum: dict of {mz: intensity} or list of (mz, intensity) tuples.
         """
-        def normalize_spectrum(spec):
+        def normalize_spectrum(spec) -> Any:
             mz_list = []
             int_list = []
             if isinstance(spec, dict):
@@ -201,10 +205,10 @@ class MageExporter:
 
         out_path = os.path.join(self.output_dir, filename)
         fig.write_html(out_path)
-        print(f"📊 Head-to-tail MS plot rendered to: {out_path}")
+        logger.info(f"📊 Head-to-tail MS plot rendered to: {out_path}")
         return out_path
 
-    def export_to_parquet(self, job_queue, filename="mage_ri_catalog.parquet"):
+    def export_to_parquet(self, job_queue, filename="mage_ri_catalog.parquet") -> Any:
         """
         Exports Retention Index (RI) catalog dataset into PyArrow Parquet format (Suggestion 69).
         """
@@ -230,16 +234,16 @@ class MageExporter:
         out_path = os.path.join(self.output_dir, filename)
         try:
             df.to_parquet(out_path, engine="pyarrow", index=False)
-            print(f"📦 RI catalog exported to PyArrow Parquet: {out_path}")
+            logger.info(f"📦 RI catalog exported to PyArrow Parquet: {out_path}")
         except Exception as e:
             # Fallback to fastparquet or json export if pyarrow engine fails
             try:
                 df.to_parquet(out_path, index=False)
-                print(f"📦 RI catalog exported to Parquet (fallback): {out_path}")
+                logger.info(f"📦 RI catalog exported to Parquet (fallback): {out_path}")
             except Exception as ex:
                 json_path = out_path.replace(".parquet", ".json")
                 df.to_json(json_path, orient="records", indent=4)
-                print(f"⚠️ Parquet export error ({e}). Exported catalog as JSON: {json_path}")
+                logger.error(f"⚠️ Parquet export error ({e}). Exported catalog as JSON: {json_path}")
                 return json_path
         return out_path
 

@@ -1,3 +1,6 @@
+import logging
+from typing import Any
+logger = logging.getLogger(__name__)
 # %%
 import numpy as np
 try:
@@ -47,14 +50,14 @@ class MageChromatographySim:
     Predicts Retention Indices (RI) from molecular descriptors and builds
     the theoretical 1D chromatogram array.
     """
-    def __init__(self, column_config):
+    def __init__(self, column_config) -> None:
         self.column_config = column_config
         self.plate_height_mm = 0.05  # Heuristic optimal HETP
         self.dead_time_min = 1.5
         
-        print(f"📈 MAGE Sim Initialized. Column Length: {self.column_config.get('length_m', 30)}m")
+        logger.info(f"📈 MAGE Sim Initialized. Column Length: {self.column_config.get('length_m', 30)}m")
 
-    def _compute_chi_indices(self, smiles_or_mol):
+    def _compute_chi_indices(self, smiles_or_mol) -> Any:
         """
         Computes Randić zero-order (chi_0) and first-order (chi_1) molecular connectivity indices (MAGE-06).
         """
@@ -79,7 +82,7 @@ class MageChromatographySim:
                 
         return float(chi_0), float(chi_1)
 
-    def _heuristic_group_contribution_ri(self, descriptors):
+    def _heuristic_group_contribution_ri(self, descriptors) -> Any:
         """
         Group Contribution & Topological Index Fallback Model (MAGE-05, MAGE-06).
         Replaces simple linear heuristic with Randić connectivity indices and Group Contributions.
@@ -96,7 +99,7 @@ class MageChromatographySim:
         ri = 100.0 * (0.85 * chi_0 + 1.65 * chi_1 + 0.45 * logp + 0.04 * mw - 0.008 * tpsa) + 150.0
         return max(ri, 0.0)
 
-    def _abraham_solvation_parameters(self, descriptors):
+    def _abraham_solvation_parameters(self, descriptors) -> Any:
         """
         Estimates solute Abraham solvation parameters (E, S, A, B, V) from descriptors and SMILES.
         E: Excess molar refraction
@@ -133,7 +136,7 @@ class MageChromatographySim:
         S = (tpsa / (mw + 1.0)) * 2.5 + (0.1 if logp < 1.0 else 0.0)
         return {"E": float(E), "S": float(S), "A": float(A), "B": float(B), "V": float(V)}
 
-    def _apply_stationary_phase_partitioning(self, base_ri, descriptors):
+    def _apply_stationary_phase_partitioning(self, base_ri, descriptors) -> Any:
         """
         Modifies Retention Index (RI) based on stationary phase polarity (DB-5 vs DB-Wax)
         using Abraham solvation parameters (MAGE Suggestion 66).
@@ -150,7 +153,7 @@ class MageChromatographySim:
             # DB-5 non-polar phase baseline
             return base_ri
 
-    def compute_van_deemter_hetp(self, u_cm_s=None, station_phase_params=None):
+    def compute_van_deemter_hetp(self, u_cm_s=None, station_phase_params=None) -> Any:
         """
         Computes Golay/van Deemter peak height HETP H = B/u + (C_s + C_m)*u (MAGE-06).
         Uses station phase data (d_f, d_c, D_s, D_m) when provided.
@@ -203,7 +206,7 @@ class MageChromatographySim:
 
         return float(H_mm), float(u_cm_s), tag
 
-    def _train_default_xgb_model(self, model_path):
+    def _train_default_xgb_model(self, model_path) -> Any:
         """Trains a true XGBoost regression model on dataset loaded from cochem_mage_data/mage_ri_dataset.json (MAGE-05/Suggestion 65)."""
         import json
         from pathlib import Path
@@ -220,7 +223,7 @@ class MageChromatographySim:
                 raise FileNotFoundError(f"Training dataset 'cochem_mage_data/mage_ri_dataset.json' not found at {dataset_path}")
 
         with open(dataset_path, "r", encoding="utf-8") as f:
-            compounds_data = json.load(f)
+            compounds_data = json.loads(f.read())
 
         X, y = [], []
         for item in compounds_data:
@@ -249,7 +252,7 @@ class MageChromatographySim:
         model.save_model(str(model_path))
         return model
 
-    def _predict_ri(self, descriptors):
+    def _predict_ri(self, descriptors) -> Any:
         """
         Predicts Kováts Retention Index using XGBoost ML regression model and Abraham solvation stationary phase scaling.
         """
@@ -269,7 +272,7 @@ class MageChromatographySim:
 
         # Domain Extrapolation Safety Check
         if mw > 800 or logp > 12:
-            print(f"⚠️ EXTRAPOLATION WARNING: Descriptors (MW={mw:.1f}, LogP={logp:.1f}) exceed 95th percentile of training data.")
+            logger.warning(f"⚠️ EXTRAPOLATION WARNING: Descriptors (MW={mw:.1f}, LogP={logp:.1f}) exceed 95th percentile of training data.")
 
         model_path = Path("mage_ri_xgboost.json")
         if not model_path.exists():
@@ -297,7 +300,7 @@ class MageChromatographySim:
         final_ri = self._apply_stationary_phase_partitioning(base_ri, descriptors)
         return max(final_ri, 0.0)
 
-    def simulate_retention(self, active_matrix, temperature_ramp_rate=10.0):
+    def simulate_retention(self, active_matrix, temperature_ramp_rate=10.0) -> Any:
         """
         Maps physical descriptors to retention times.
         Attaches product_class, accuracy_window, and provenance_tag.
@@ -326,7 +329,7 @@ class MageChromatographySim:
             
         return active_matrix
 
-    def build_chromatogram(self, active_matrix, t_max=40.0, resolution=10000):
+    def build_chromatogram(self, active_matrix, t_max=40.0, resolution=10000) -> Any:
         """
         Constructs the macroscopic chromatogram intensity array.
         Normalizes peak areas individually prior to summing TIC array (MAGE-07).
@@ -403,10 +406,10 @@ if __name__ == "__main__":
     sim = MageChromatographySim(mock_col_config)
     simulated_jobs = sim.simulate_retention(mock_jobs, temperature_ramp_rate=15.0)
     
-    print("\n⏱️ Predicted Retention Results:")
+    logger.info("\n⏱️ Predicted Retention Results:")
     for j in simulated_jobs:
-        print(f"ID: {j['id']} | RI: {j['predicted_ri']} | t_R: {j['predicted_tr']} min")
+        logger.info(f"ID: {j['id']} | RI: {j['predicted_ri']} | t_R: {j['predicted_tr']} min")
         
     t_axis, trace = sim.build_chromatogram(simulated_jobs, t_max=30.0, resolution=5000)
-    print(f"\n✅ Chromatogram Array Generated. Shape: {trace.shape}, Max Peak: {np.max(trace):.1f}%")
+    logger.info(f"\n✅ Chromatogram Array Generated. Shape: {trace.shape}, Max Peak: {np.max(trace):.1f}%")
 # %%

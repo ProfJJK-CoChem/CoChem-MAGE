@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger("NodeBridge")
 
 class NodeBridge:
-    def __init__(self, config_path: str = "cochem_system_config.json"):
+    def __init__(self, config_path: str = "cochem_system_config.json") -> None:
         """
         Initializes the HPC bridge by parsing the global registry.
         """
@@ -43,7 +43,7 @@ class NodeBridge:
             
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
+                config = json.loads(f.read())
             return config.get("hpc_environments", {})
         except json.JSONDecodeError as e:
             logger.error(f"Registry corruption detected: {e}")
@@ -132,10 +132,10 @@ class NodeBridge:
 
 # Pre-flight unit test execution
 if __name__ == "__main__":
-    print("Running CoChem-NODE Pre-Flight Interface Test...")
+    logger.info("Running CoChem-NODE Pre-Flight Interface Test...")
     bridge = NodeBridge()
     if not bridge.hpc_config:
-        print("[NOTICE] No HPC targets currently mapped in local cochem_system_config.json.")
-        print("[NOTICE] NodeBridge is ready to accept routing requests once provisioned.")
+        logger.info("[NOTICE] No HPC targets currently mapped in local cochem_system_config.json.")
+        logger.info("[NOTICE] NodeBridge is ready to accept routing requests once provisioned.")
     else:
-        print("[SUCCESS] Discovered HPC configurations.")
+        logger.info("[SUCCESS] Discovered HPC configurations.")

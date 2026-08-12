@@ -1,3 +1,6 @@
+import logging
+from typing import Any
+logger = logging.getLogger(__name__)
 # %%
 import os
 import json
@@ -11,10 +14,10 @@ from rdkit.Chem import Descriptors
 
 class NistApiBridge:
     """Handles external PubChem/NIST structure lookup queries with strict timeout fail-overs (MAGE-13)."""
-    def __init__(self, timeout_sec=2.5):
+    def __init__(self, timeout_sec=2.5) -> None:
         self.timeout = timeout_sec
 
-    def query_smiles(self, smiles):
+    def query_smiles(self, smiles) -> Any:
         try:
             # Official PubChem REST API endpoint for structure query (MAGE-13)
             encoded_smiles = urllib.parse.quote(smiles)
@@ -26,7 +29,7 @@ class NistApiBridge:
                     return "PUBCHEM_MATCH_FOUND"
             return "NOT_FOUND"
         except requests.exceptions.Timeout:
-            print(f"⚠️ External API Timeout ({self.timeout}s) for '{smiles}'. Falling back to ab initio MAGE simulation.")
+            logger.warning(f"⚠️ External API Timeout ({self.timeout}s) for '{smiles}'. Falling back to ab initio MAGE simulation.")
             return "TIMEOUT_FALLBACK"
         except requests.exceptions.RequestException:
             return "NOT_FOUND"
@@ -36,7 +39,7 @@ class MageIngestor:
     Stage 1.0 (Update): Smart Ingestion & Instrument Profiling.
     Now includes Column Intelligence and NIST API Failover checks.
     """
-    def __init__(self, sys_config_path=None, registry_path="mage_column_registry.json"):
+    def __init__(self, sys_config_path=None, registry_path="mage_column_registry.json") -> None:
         if sys_config_path is None:
             env_p = os.environ.get("COCHEM_SYSTEM_CONFIG")
             if env_p and os.path.exists(env_p):
@@ -60,7 +63,7 @@ class MageIngestor:
         self._verify_environment()
         self._load_registry()
 
-    def _verify_environment(self):
+    def _verify_environment(self) -> Any:
         if not os.path.exists(self.sys_config_path):
             # Create a default system config if absent for testing
             os.makedirs(os.path.dirname(self.sys_config_path), exist_ok=True)
@@ -68,9 +71,9 @@ class MageIngestor:
             with open(self.sys_config_path, 'w') as f:
                 json.dump(default_sys, f)
         with open(self.sys_config_path, 'r') as f:
-            self.system_config = json.load(f)
+            self.system_config = json.loads(f.read())
 
-    def _load_registry(self):
+    def _load_registry(self) -> Any:
         if not os.path.exists(self.registry_path):
             default_registry = {
                 "columns": {
@@ -81,9 +84,9 @@ class MageIngestor:
             with open(self.registry_path, 'w') as f:
                 json.dump(default_registry, f)
         with open(self.registry_path, 'r') as f:
-            self.column_registry = json.load(f)
+            self.column_registry = json.loads(f.read())
 
-    def load_instrument_profile(self, yaml_path):
+    def load_instrument_profile(self, yaml_path) -> Any:
         if not os.path.exists(yaml_path):
             default_yaml = {
                 "instrument_name": "Agilent_5977B_Default",
@@ -106,7 +109,7 @@ class MageIngestor:
         self.instrument_profile["column_physics"] = self.column_registry["columns"][req_col]
         return self.instrument_profile
 
-    def sanitize_molecule_queue(self, smiles_list):
+    def sanitize_molecule_queue(self, smiles_list) -> Any:
         valid_queue = []
         tpsa_values = []
         
@@ -133,7 +136,7 @@ class MageIngestor:
         if tpsa_values and self.instrument_profile.get("column_type") == "DB-5MS":
             median_tpsa = np.median(tpsa_values)
             if median_tpsa > 60.0:
-                print(f"💡 COLUMN INTEL: Batch median TPSA is high ({median_tpsa:.1f}). Recommend silylation (TMS) or trifluoroacetylation (TFA) derivatization protocol prior to GC analysis.")
+                logger.info(f"💡 COLUMN INTEL: Batch median TPSA is high ({median_tpsa:.1f}). Recommend silylation (TMS) or trifluoroacetylation (TFA) derivatization protocol prior to GC analysis.")
                 
         return valid_queue
 # %%

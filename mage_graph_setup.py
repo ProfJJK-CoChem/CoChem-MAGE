@@ -1,3 +1,6 @@
+import logging
+from typing import Any
+logger = logging.getLogger(__name__)
 # %%
 import torch
 from rdkit import Chem
@@ -17,23 +20,23 @@ class MageGraphBuilder:
         Chem.rdchem.BondType.TRIPLE: 8.5
     }
 
-    def __init__(self, device=None):
+    def __init__(self, device=None) -> None:
         # Auto-detect CUDA for tensor mapping
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = torch.device(device)
             
-        print(f"⚙️ MAGE Graph Builder initialized. Compute device: {self.device}")
+        logger.info(f"⚙️ MAGE Graph Builder initialized. Compute device: {self.device}")
 
-    def _is_benzylic_or_allylic(self, atom):
+    def _is_benzylic_or_allylic(self, atom) -> Any:
         """Checks if atom is benzylic or allylic (adjacent to an aromatic ring or double bond)."""
         for nbr_bond in atom.GetBonds():
             if nbr_bond.GetIsAromatic() or nbr_bond.GetBondType() == Chem.rdchem.BondType.DOUBLE:
                 return True
         return False
 
-    def _estimate_edge_bde(self, bond):
+    def _estimate_edge_bde(self, bond) -> Any:
         """
         Estimates energy required to homolytically cleave a specific bond, 
         accounting for local chemical environment (allylic, benzylic, aliphatic, aromatic) (MAGE-15).
@@ -68,7 +71,7 @@ class MageGraphBuilder:
 
         return base_bde
 
-    def build_tensor_graph(self, mol):
+    def build_tensor_graph(self, mol) -> Any:
         """
         Converts an RDKit Mol into a PyTorch-compatible graph dictionary.
         Extracts atomic numbers (nodes), connectivity (edges), and BDEs (edge weights).
@@ -170,15 +173,15 @@ if __name__ == "__main__":
     test_mol = Chem.MolFromSmiles(smiles)
     Chem.SanitizeMol(test_mol)
     
-    print(f"\n🧪 Building PyTorch Graph for {smiles}...")
+    logger.info(f"\n🧪 Building PyTorch Graph for {smiles}...")
     graph = builder.build_tensor_graph(test_mol)
     
-    print(f"Nodes (Atoms): {graph['num_nodes']}")
-    print(f"Edge Index Shape: {graph['edge_index'].shape}")
-    print(f"Average Graph BDE: {graph['edge_bde'].mean().item():.2f} eV")
+    logger.info(f"Nodes (Atoms): {graph['num_nodes']}")
+    logger.info(f"Edge Index Shape: {graph['edge_index'].shape}")
+    logger.info(f"Average Graph BDE: {graph['edge_bde'].mean().item():.2f} eV")
     
     # Memory footprint sanity check
     mem_bytes = graph['x'].element_size() * graph['x'].nelement() + \
                 graph['edge_index'].element_size() * graph['edge_index'].nelement()
-    print(f"✅ VRAM/RAM Footprint for single molecule: {mem_bytes} bytes")
+    logger.info(f"✅ VRAM/RAM Footprint for single molecule: {mem_bytes} bytes")
 # %%

@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 # %%
 import asyncio
 import uvicorn
@@ -13,7 +15,7 @@ class MageTelemetryBridge:
     Provides a non-blocking FastAPI backend that allows CoChem-DOCK
     to stream real-time progress of GC-MS simulations.
     """
-    def __init__(self, host: str = "127.0.0.1", port: int = 8055):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8055) -> None:
         self.host = host
         self.port = port
         self.app = FastAPI(title="CoChem-MAGE Telemetry API", version="1.0")
@@ -41,20 +43,20 @@ class MageTelemetryBridge:
         
         self._setup_routes()
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> Any:
         """Maps the HTTP GET routes for the DOCK interface."""
         @self.app.get("/mage/status")
-        async def get_status():
+        async def get_status() -> Any:
             with self._lock:
                 return self.current_state
 
         @self.app.get("/mage/health")
-        async def health_check():
+        async def health_check() -> Any:
             return {"service": "CoChem-MAGE Telemetry", "status": "ONLINE"}
 
     def update_state(self, status: str, progress: float, operation: str, 
                      isomer: Optional[str] = None, rs: Optional[float] = None, 
-                     error: Optional[str] = None, provenance_tag: str = "[D]"):
+                     error: Optional[str] = None, provenance_tag: str = "[D]") -> None:
         """Thread-safe method for the MAGE engine to report its current progress."""
         with self._lock:
             self.current_state["status"] = status
@@ -75,11 +77,11 @@ class MageTelemetryBridge:
             if error is not None:
                 self.current_state["error_flag"] = error
 
-    def launch_background_server(self):
+    def launch_background_server(self) -> Any:
         """Spawns the Uvicorn ASGI server in a daemon thread to prevent kernel blocking."""
-        print(f"📡 Booting MAGE Telemetry Bridge on http://{self.host}:{self.port}...")
+        logger.info(f"📡 Booting MAGE Telemetry Bridge on http://{self.host}:{self.port}...")
         
-        def run_server():
+        def run_server() -> Any:
             # Disable Uvicorn access logs to prevent Jupyter cell spam
             uvicorn.run(self.app, host=self.host, port=self.port, log_level="critical")
             
@@ -93,7 +95,7 @@ if __name__ == "__main__":
     telemetry.launch_background_server()
     
     # Simulate a MAGE pipeline run reporting back to the UI
-    print("\\n🧪 Simulating MAGE Pipeline Execution...")
+    logger.info("\\n🧪 Simulating MAGE Pipeline Execution...")
     telemetry.update_state("RUNNING", 10.0, "Ingesting hardware profile and SMILES...")
     time.sleep(1.5)
     
@@ -104,13 +106,13 @@ if __name__ == "__main__":
     time.sleep(2)
     
     telemetry.update_state("COMPLETE", 100.0, "Chromatogram compiled and SCRIBE payload saved.", rs=1.62)
-    print("✅ Pipeline complete. Telemetry state reads:")
+    logger.info("✅ Pipeline complete. Telemetry state reads:")
     
     # Read back the final state
     import requests
     try:
         response = requests.get("http://127.0.0.1:8055/mage/status")
-        print(json.dumps(response.json(), indent=2))
+        logger.info(json.dumps(response.json(), indent=2))
     except Exception as e:
-        print(f"Failed to query local telemetry: {e}")
+        logger.error(f"Failed to query local telemetry: {e}")
 # %%

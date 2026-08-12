@@ -1,3 +1,6 @@
+import logging
+from typing import Any
+logger = logging.getLogger(__name__)
 # %%
 import torch
 import networkx as nx
@@ -12,11 +15,11 @@ class MageFragmenter:
     and exact chemical bond breaking / RDKit BRICS fragmenting logic.
     Implements strict garbage collection for batch VRAM safety.
     """
-    def __init__(self, impact_energy_ev=70.0, device=None):
+    def __init__(self, impact_energy_ev=70.0, device=None) -> None:
         self.impact_energy_ev = impact_energy_ev
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-    def _convert_tensor_to_nx(self, graph_data):
+    def _convert_tensor_to_nx(self, graph_data) -> Any:
         if isinstance(graph_data, nx.Graph):
             return graph_data.copy()
             
@@ -94,7 +97,7 @@ class MageFragmenter:
             
         return G
 
-    def _beyer_swinehart_rrkm_rate(self, current_energy_ev, e0_bde_ev, n_atoms):
+    def _beyer_swinehart_rrkm_rate(self, current_energy_ev, e0_bde_ev, n_atoms) -> Any:
         """
         Beyer-Swinehart RRKM state counting rate evaluation k(E) = N^#(E - E_0) / (h * rho(E)) (MAGE-10).
         Uses discretized vibrational frequencies to calculate exact quantum density of states.
@@ -133,7 +136,7 @@ class MageFragmenter:
         k_E = N_ts / (h_ev_s * rho_E)
         return float(k_E)
 
-    def _rrkm_cleavage(self, G, current_energy):
+    def _rrkm_cleavage(self, G, current_energy) -> Any:
         """
         RRKM-based deterministic cleavage using Beyer-Swinehart rate constants and 
         RDKit BRICS / bond environment priority (MAGE-10 & MAGE-11).
@@ -182,7 +185,7 @@ class MageFragmenter:
         else:
             return [G]
 
-    def simulate_spectrum(self, graph_data, num_trajectories=100):
+    def simulate_spectrum(self, graph_data, num_trajectories=100) -> Any:
         if not graph_data:
             return {0.0: 0.0}
 
