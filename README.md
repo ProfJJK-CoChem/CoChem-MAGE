@@ -1,59 +1,56 @@
-# **CoChem-MAGE: GC-MS & Chromatographic Emulation**
+# **CoChem-MAGE: Mass and Gas-chromatography Emulator**
+
+**PI/Developer**: Dr. Joshua John Klaassen
+**ORCiD**: [https://orcid.org/0009-0007-1506-4401](https://orcid.org/0009-0007-1506-4401)
+**GitHub Organization**: [https://github.com/ProfJJK-CoChem](https://github.com/ProfJJK-CoChem)
+
+> **Important**: CoChem has recently migrated to the **Valeev Stack (MPQC, F12)** for enhanced baseline quantum energy resolutions `[M]`.
+
+Please refer to the authoritative [CoChem User Manual](https://github.com/ProfJJK-CoChem/CoChem-BASE/blob/main/CoChem_User_Manual.md) and [Method Matrix](https://github.com/ProfJJK-CoChem/CoChem-BASE/blob/main/Method_Matrix.md) for full execution instructions and basis set provenances.
 
 ## **Overview**
 
-**CoChem-MAGE** (Mass and Gas-chromatography Emulator) bridges the computational chemistry pipeline into analytical chemistry. It predicts both the Gas Chromatography Retention Index (RI) and the Electron Ionization Mass Spectrometry (EI-MS) fragmentation pattern of molecular systems.
+**CoChem-MAGE** bridges computational chemistry with analytical chemistry by predicting Gas Chromatography Retention Indices (RI) and Electron Ionization Mass Spectrometry (EI-MS) fragmentation patterns.
 
-MAGE utilizes RRKM (Rice-Ramsperger-Kassel-Marcus) statistical rate theory to model molecular fragmentation post-ionization, while its chromatography simulation module applies topological descriptors to predict Kováts Retention Indices and build theoretical chromatograms.
+Instead of performing prohibitive ab initio molecular dynamics (AIMD) for 70 eV EI-MS collisions `[E]`, MAGE utilizes RRKM statistical rate theory and rule-based graph cleavage (e.g., McLafferty rearrangements) on molecular graphs. The RRKM rate constant proxy is computed as:
 
----
+$$k(E) = \nu \left(1 - \frac{E_0}{E}\right)^{s-1}$$
 
-## **Scientific & Technical Trade-offs**
+MAGE also predicts Kováts Retention Indices via a regression model based on molecular weight, partition coefficient, and topological polar surface area (TPSA).
 
-* **Heuristic Cleavage vs. Ab Initio Bond Breaking:** To strictly simulate a 70 eV EI-MS collision via ab initio molecular dynamics (AIMD) for 1,000 isomers is computationally prohibitive. MAGE trades extreme ab initio fidelity for statistical speed by utilizing RRKM algorithms and rule-based graph cleavage (McLafferty rearrangements, alpha-cleavage) on molecular graphs.
-* **Retention Index Modeling:** MAGE predicts Kováts Retention Indices (RI) on stationary phases (like the non-polar DB-5) using a regression model based on molecular weight (MW), partition coefficient (LogP), and topological polar surface area (TPSA). This allows near-instantaneous GC resolution checks but may degrade in accuracy for highly fluorinated or structurally exotic natural products.
+## **Data Flow**
 
----
+```mermaid
+graph TD
+    A[Molecular Graph] --> B[RRKM Fragmenter]
+    A --> C[RI Regression Model]
+    B --> D[Theoretical MS Spectrum]
+    C --> E[Predicted Chromatogram]
+```
 
-## **File Topology & Core Scripts**
+## **Setup and Installation**
 
-MAGE consists of the following key Python scripts:
-
-1. **[cochem_mage_main.py](file:///d:/GitHub-Repo/CoChem-MAGE/cochem_mage_main.py)** (Central System Orchestrator):
-   * Coordinates the overall GC-MS simulation pipeline, manages output directories, and compiles logs.
-   
-2. **[mage_column_registry.py](file:///d:/GitHub-Repo/CoChem-MAGE/mage_column_registry.py)** (Column Intelligence & Ingestor):
-   * Profiles the active instrument setup (e.g., Agilent 5977B) and column type (e.g., DB-5MS).
-   * Audits batch TPSA descriptors and recommends polar columns (e.g., DB-Wax) if high polar tailing is expected.
-
-3. **[mage_fragmenter.py](file:///d:/GitHub-Repo/CoChem-MAGE/mage_fragmenter.py)** (RRKM Graph-Rewriting Fragmenter):
-   * Performs stochastic cleavage of bonds based on the RRKM rate constant proxy:
-     $$k(E) = \nu \left(1 - \frac{E_0}{E}\right)^{s-1}$$
-     where $E_0$ is the bond dissociation energy (BDE) and $s$ is the active vibrational degrees of freedom.
-
-4. **[cochem_mage_sim.py](file:///d:/GitHub-Repo/CoChem-MAGE/cochem_mage_sim.py)** (Chromatography Simulation & RI Regression):
-   * Performs Kováts RI regression based on molecular descriptors and generates theoretical Gaussian peak shapes based on column theoretical plate counts.
-
----
-
-## **Workflow & How to Run**
-
-To execute a chromatography and fragmentation simulation:
-
-1. **Run the Chromatography Simulator**:
-   Generates predicted retention indices ($RI$) and retention times ($t_R$) for a target molecular matrix, and outputs the theoretical chromatogram:
+1. Clone the MAGE repository:
    ```bash
-   python cochem_mage_sim.py
+   git clone https://github.com/ProfJJK-CoChem/CoChem-MAGE.git
+   cd CoChem-MAGE
+   pip install -r requirements.txt
    ```
+2. Ensure RDKit and SciPy are available in your environment.
 
-2. **Verify Column Profiles & Ingest molecular queues**:
-   Launches column checks and queries NIST webbook APIs if available:
+## **Getting Started**
+
+1. **Verify Column Profiles**:
    ```bash
    python mage_column_registry.py
    ```
-
-3. **Run the Central Orchestration Loop**:
-   Boots data structures and triggers simulation traces:
+2. **Run Chromatography Simulator**:
+   ```bash
+   python cochem_mage_sim.py
+   ```
+3. **Run Central Orchestration Loop**:
    ```bash
    python cochem_mage_main.py
    ```
+
+---
