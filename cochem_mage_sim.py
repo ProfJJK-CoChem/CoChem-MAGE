@@ -82,59 +82,34 @@ class MageChromatographySim:
                 
         return float(chi_0), float(chi_1)
 
-    def _heuristic_group_contribution_ri(self, descriptors) -> Any:
-        """
-        Group Contribution & Topological Index Fallback Model (MAGE-05, MAGE-06).
-        Replaces simple linear heuristic with Randić connectivity indices and Group Contributions.
-        """
-        mw = descriptors.get("mw", 0)
-        logp = descriptors.get("logp", 0)
-        tpsa = descriptors.get("tpsa", 0)
-        smiles = descriptors.get("smiles", "")
 
-        chi_0, chi_1 = self._compute_chi_indices(smiles)
-        
-        # Group contribution estimate combining topological connectivity and physical descriptors
-        # Stationary phase polarity factor (default DB-5 non-polar)
-        ri = 100.0 * (0.85 * chi_0 + 1.65 * chi_1 + 0.45 * logp + 0.04 * mw - 0.008 * tpsa) + 150.0
-        return max(ri, 0.0)
 
-    def _abraham_solvation_parameters(self, descriptors) -> Any:
+    def _ingest_abraham_from_h5(self, descriptors) -> Any:
         """
-        Estimates solute Abraham solvation parameters (E, S, A, B, V) from descriptors and SMILES.
-        E: Excess molar refraction
-        S: Dipolarity / polarizability
-        A: H-bond acidity
-        B: H-bond basicity
-        V: McGowan volume (cm^3/mol / 100)
+        Ingests solute Abraham solvation parameters (E, S, A, B, V) from upstream HDF5 tier (landscape.h5).
         """
+        import os
+        import h5py
+        from pathlib import Path
         smiles = descriptors.get("smiles", "")
-        mw = float(descriptors.get("mw", 0))
-        tpsa = float(descriptors.get("tpsa", 0))
-        logp = float(descriptors.get("logp", 0))
-        
-        mol = Chem.MolFromSmiles(smiles) if smiles else None
-        
-        # McGowan Volume V ~ MW / 100
-        V = mw / 100.0
-        
-        if mol is not None:
-            # H-bond acidity A: OH, NH donors
-            A = float(sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() in ['O', 'N'] and atom.GetTotalNumHs() > 0))
-            # H-bond basicity B: O, N acceptors
-            B = float(sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() in ['O', 'N']))
-            # Excess refraction E: aromatic rings + halogens
-            aromatic_rings = len(Chem.GetSSSR(mol))
-            halogens = sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() in ['F', 'Cl', 'Br', 'I'])
-            E = 0.8 * aromatic_rings + 0.2 * halogens
-        else:
-            A = max(0.0, tpsa / 30.0)
-            B = max(0.0, tpsa / 20.0)
-            E = max(0.0, logp * 0.2)
+        h5_path = os.environ.get("COCHEM_TARGET_H5", str(Path.home() / ".cochem" / "artifacts" / "landscape.h5"))
+        if not os.path.exists(h5_path):
+            raise NotImplementedError("[MISSING DATA] landscape.h5 not found for deep physics state ingestion.")
+        try:
+            with h5py.File(h5_path, 'r') as f:
+                if smiles in f:
+                    grp = f[smiles]
+                    return {
+                        "E": float(grp.attrs.get("E", 0.0)),
+                        "S": float(grp.attrs.get("S", 0.0)),
+                        "A": float(grp.attrs.get("A", 0.0)),
+                        "B": float(grp.attrs.get("B", 0.0)),
+                        "V": float(grp.attrs.get("V", 0.0))
+                    }
+        except Exception as e:
+            logger.error(f"Failed to read HDF5 state: {e}")
             
-        # Dipolarity S: related to TPSA / MW ratio
-        S = (tpsa / (mw + 1.0)) * 2.5 + (0.1 if logp < 1.0 else 0.0)
-        return {"E": float(E), "S": float(S), "A": float(A), "B": float(B), "V": float(V)}
+        raise NotImplementedError(f"[MISSING DATA] Solvation parameters for {smiles} not present in {h5_path}.")
 
     def _apply_stationary_phase_partitioning(self, base_ri, descriptors) -> Any:
         """
@@ -142,7 +117,7 @@ class MageChromatographySim:
         using Abraham solvation parameters (MAGE Suggestion 66).
         """
         phase = str(self.column_config.get("stationary_phase", "5% phenyl")).lower()
-        abraham = self._abraham_solvation_parameters(descriptors)
+        abraham = self._ingest_abraham_from_h5(descriptors)
         
         # DB-Wax (polar polyethylene glycol phase) vs DB-5 (non-polar 5% phenyl methylpolysiloxane)
         if "wax" in phase or "peg" in phase or "polyethylene" in phase:

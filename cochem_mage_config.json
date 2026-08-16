@@ -1,7 +1,7 @@
 {
   "project_name": "CoChem-MAGE",
   "version": "0.4.0",
-  "data_dir": "C:\\Users\\ansac\\.cochem\\artifacts\\mage\\data",
+  "data_dir": "~/.cochem/artifacts/mage/data",
   "product_class": "PRODUCT_A",
   "tier_level": "T1-30min",
   "simulation_modules": {

@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "CoChem-MAGE: Mass and Gas-chromatography Emulator"
 authors = [{ name = "CoChem Team" }]
 dependencies = [
-    "torch",
+    "jax",
+    "jaxlib",
+    "parsl",
     "networkx",
     "numpy",
     "scipy",
@@ -16,7 +18,6 @@ dependencies = [
     "plotly",
     "xgboost",
     "h5py",
-    "paramiko",
     "pyyaml",
     "requests"
 ]
