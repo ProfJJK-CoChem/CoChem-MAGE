@@ -115,7 +115,7 @@ end
     # Generate HDF5 state (Serialization)
     import h5py
     h5_path = output_dir / "landscape.h5"
-    with h5py.File(h5_path, "a") as f:
+    with h5py.File(h5_path, "a", libver='latest') as f:
         f.swmr_mode = True
         grp = f.require_group(smiles)
         # Genuinely parsed properties from ORCA execution
