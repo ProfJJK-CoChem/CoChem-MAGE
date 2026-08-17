@@ -23,7 +23,7 @@ class MageExporter:
     Stage 3.0: Visualization and Narrative Handoff.
     Generates interactive HTML chromatograms and SCRIBE JSON payloads.
     """
-    def __init__(self, output_dir="./cochem_mage_output") -> None:
+    def __init__(self, output_dir=os.environ.get("COCHEM_ARTIFACT_DIR", "D:\\__CoChem\\.agent_artifacts\\cochem-audit\\")) -> None:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
 

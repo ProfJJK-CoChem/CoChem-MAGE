@@ -29,7 +29,7 @@ class MAGEConfig:
             return Path(artifact_dir)
         else:
             # Default to home directory with .cochem/artifacts
-            return Path.home() / ".cochem" / "artifacts" / "mage"
+            return Path(os.environ.get("COCHEM_ARTIFACT_DIR", "D:\\__CoChem\\.agent_artifacts\\cochem-audit\\")) / "mage"
         
     def _sanitize_config(self, config: dict) -> dict:
         """Sanitizes configuration by replacing prohibited legacy v3 methods/bases with v4 defaults."""

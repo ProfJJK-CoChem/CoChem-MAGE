@@ -41,7 +41,7 @@ class MAGEOrchestrator:
             return Path(artifact_dir)
         else:
             # Default to home directory with .cochem/artifacts
-            return Path.home() / ".cochem" / "artifacts" / "mage"
+            return Path(os.environ.get("COCHEM_ARTIFACT_DIR", str(Path.home() / ".cochem" / "artifacts"))) / "mage"
         
     def _load_config(self) -> dict:
         """Load configuration from JSON file."""
@@ -149,26 +149,32 @@ class MAGEOrchestrator:
                 results["spectrum"] = fragmenter.simulate_spectrum(graph_data)
             elif raw_smiles is not None:
                 smiles = str(raw_smiles)
-                smiles_lower = smiles.lower()
-                if smiles_lower == "benzene":
-                    smiles = "c1ccccc1"
-                elif smiles_lower == "aspirin":
-                    smiles = "CC(=O)Oc1ccccc1C(=O)O"
                 g = fragmenter.graph_from_smiles(smiles)
                 results["spectrum"] = fragmenter.simulate_spectrum(g)
             else:
-                g = fragmenter.graph_from_smiles("c1ccccc1")
-                results["spectrum"] = fragmenter.simulate_spectrum(g)
+                logger.error("❌ [MISSING DATA] No valid smiles or graph_data provided for rrkm.")
+                results["status"] = "ERR_MISSING_DATA"
+                return results
             results["status"] = "COMPLETED"
             
         elif sim_type_str in ["chromatography", "chrom"]:
-            col_config = input_data.get("column_config", {"length_m": 30.0, "stationary_phase": "5% phenyl"})
+            col_config = input_data.get("column_config")
+            if not col_config:
+                logger.error("❌ [MISSING DATA] 'column_config' not provided.")
+                results["status"] = "ERR_MISSING_DATA"
+                return results
             sim = MageChromatographySim(col_config)
-            jobs = input_data.get("jobs", [
-                {"id": "mol_0", "mw": 180.15, "logp": 1.19, "tpsa": 63.6, "status": "CACHED"},
-                {"id": "mol_1", "mw": 94.11,  "logp": 1.46, "tpsa": 20.2, "status": "COMPUTED"}
-            ])
-            sim_jobs = sim.simulate_retention(jobs, temperature_ramp_rate=input_data.get("ramp_rate", 10.0))
+            jobs = input_data.get("jobs")
+            if not jobs:
+                logger.error("❌ [MISSING DATA] 'jobs' array not provided.")
+                results["status"] = "ERR_MISSING_DATA"
+                return results
+            ramp_rate = input_data.get("ramp_rate")
+            if ramp_rate is None:
+                logger.error("❌ [MISSING DATA] 'ramp_rate' not provided.")
+                results["status"] = "ERR_MISSING_DATA"
+                return results
+            sim_jobs = sim.simulate_retention(jobs, temperature_ramp_rate=ramp_rate)
             t_axis, trace = sim.build_chromatogram(sim_jobs)
             results["jobs"] = sim_jobs
             results["time_axis"] = t_axis.tolist()
@@ -182,13 +188,12 @@ class MAGEOrchestrator:
         
     def generate_report(self, output_dir: str = "./reports", job_queue: list = None) -> str:
         """Generate comprehensive report of simulation findings."""
+        if job_queue is None:
+            logger.error("❌ [MISSING DATA] 'job_queue' must be provided for report generation.")
+            return "[MISSING DATA]"
+            
         logger.info(f"📄 Generating MAGE report in {output_dir}")
         exporter = MageExporter(output_dir=output_dir)
-        if job_queue is None:
-            job_queue = [
-                {"smiles": "c1ccccc1", "chemical_class": "Aromatic", "mw": 78.11, "tpsa": 0.0, "logp": 2.13, "status": "COMPUTED", "predicted_tr": 3.5},
-                {"smiles": "CC(=O)Oc1ccccc1C(=O)O", "chemical_class": "Ester/Acid", "mw": 180.16, "tpsa": 63.6, "logp": 1.19, "status": "COMPUTED", "predicted_tr": 8.2}
-            ]
         
         html_path = exporter.build_interactive_chromatogram(job_queue, filename="mage_chromatogram.html")
         scribe_path = exporter.export_scribe_payload(job_queue, self.config, filename="mage_scribe_payload.json")
@@ -205,10 +210,6 @@ def main() -> Any:
     
     orchestrator = MAGEOrchestrator()
     orchestrator.initialize()
-    
-    # Example usage
-    orchestrator.run_simulation("rrkm", {"molecule": "benzene"})
-    orchestrator.generate_report("./reports")
-    
+
 if __name__ == "__main__":
     main()

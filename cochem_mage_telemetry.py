@@ -89,30 +89,3 @@ class MageTelemetryBridge:
         self.server_thread.start()
         time.sleep(1) # Allow port binding
 
-# Execute Telemetry Test
-if __name__ == "__main__":
-    telemetry = MageTelemetryBridge()
-    telemetry.launch_background_server()
-    
-    # Simulate a MAGE pipeline run reporting back to the UI
-    logger.info("\\n🧪 Simulating MAGE Pipeline Execution...")
-    telemetry.update_state("RUNNING", 10.0, "Ingesting hardware profile and SMILES...")
-    time.sleep(1.5)
-    
-    telemetry.update_state("RUNNING", 45.0, "Computing RRKM Fragmentation (GPU)...", isomer="Aspirin")
-    time.sleep(2)
-    
-    telemetry.update_state("OPTIMIZING", 80.0, "Van Deemter flow optimization active...", rs=0.85)
-    time.sleep(2)
-    
-    telemetry.update_state("COMPLETE", 100.0, "Chromatogram compiled and SCRIBE payload saved.", rs=1.62)
-    logger.info("✅ Pipeline complete. Telemetry state reads:")
-    
-    # Read back the final state
-    import requests
-    try:
-        response = requests.get("http://127.0.0.1:8055/mage/status")
-        logger.info(json.dumps(response.json(), indent=2))
-    except Exception as e:
-        logger.error(f"Failed to query local telemetry: {e}")
-# %%

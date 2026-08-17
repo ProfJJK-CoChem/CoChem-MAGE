@@ -128,9 +128,9 @@ if __name__ == "__main__":
     
     # Sample Validated Data from Stage 1.0 (Segment A)
     smi = "CC(=O)OC1=CC=CC=C1C(=O)O" # Aspirin
-    mock_job = [{"smiles": smi, "rdkit_mol": Chem.MolFromSmiles(smi), "status": "SANITIZED"}]
+    test_job = [{"smiles": smi, "rdkit_mol": Chem.MolFromSmiles(smi), "status": "SANITIZED"}]
     
-    result = cache.process_batch(mock_job)
+    result = cache.process_batch(test_job)
     logger.info(f"\\n🧪 Processed Job: {result[0]['smiles']}")
     logger.info(f"Class: {result[0]['chemical_class']} | CCS Proxy: {result[0]['ccs']} Å² | Status: {result[0]['status']}")
 # %%

@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 logger = logging.getLogger(__name__)
 # %%
 import numpy as np
@@ -82,21 +82,24 @@ class MageChromatographySim:
                 
         return float(chi_0), float(chi_1)
 
-
-
-    def _ingest_abraham_from_h5(self, descriptors) -> Any:
+    def _ingest_abraham_from_h5(self, descriptors: Dict[str, Any]) -> Dict[str, float]:
         """
         Ingests solute Abraham solvation parameters (E, S, A, B, V) from upstream HDF5 tier (landscape.h5).
+        Strictly enforces HDF5 physics state reading.
         """
         import os
         import h5py
         from pathlib import Path
         smiles = descriptors.get("smiles", "")
-        h5_path = os.environ.get("COCHEM_TARGET_H5", str(Path.home() / ".cochem" / "artifacts" / "landscape.h5"))
+        if not smiles:
+            raise ValueError("[MISSING DATA] SMILES string not provided in descriptors.")
+            
+        h5_path = os.environ.get("COCHEM_TARGET_H5", str(Path(os.environ.get("COCHEM_ARTIFACT_DIR", "D:\\__CoChem\\.agent_artifacts\\cochem-audit\\")) / "landscape.h5"))
         if not os.path.exists(h5_path):
-            raise NotImplementedError("[MISSING DATA] landscape.h5 not found for deep physics state ingestion.")
+            raise FileNotFoundError(f"[MISSING DATA] HDF5 state missing at {h5_path}")
+            
         try:
-            with h5py.File(h5_path, 'r') as f:
+            with h5py.File(h5_path, 'r', swmr=True) as f:
                 if smiles in f:
                     grp = f[smiles]
                     return {
@@ -106,10 +109,11 @@ class MageChromatographySim:
                         "B": float(grp.attrs.get("B", 0.0)),
                         "V": float(grp.attrs.get("V", 0.0))
                     }
+                else:
+                    raise KeyError(f"[MISSING DATA] SMILES '{smiles}' not found in HDF5 state.")
         except Exception as e:
             logger.error(f"Failed to read HDF5 state: {e}")
-            
-        raise NotImplementedError(f"[MISSING DATA] Solvation parameters for {smiles} not present in {h5_path}.")
+            raise RuntimeError(f"[MISSING DATA] Failed to read HDF5 state: {e}")
 
     def _apply_stationary_phase_partitioning(self, base_ri, descriptors) -> Any:
         """
@@ -172,12 +176,7 @@ class MageChromatographySim:
             H_mm = H_cm * 10.0
             tag = "[D]"
         else:
-            # Empirical fallback HETP
-            A = 0.01
-            B = 0.5
-            C = 0.001
-            H_mm = A + (B / u_cm_s) + (C * u_cm_s)
-            tag = "[E]"
+            raise ValueError("[MISSING DATA] station_phase_params not provided. Empirical fallback is prohibited.")
 
         return float(H_mm), float(u_cm_s), tag
 
@@ -370,21 +369,3 @@ def calculate_kovats_ri_tp(t_rx: float, t_rn: float, t_rN: float, n: int, N: int
         return float(100 * n)
     return float(100.0 * (n + (N - n) * (t_rx - t_rn) / denom))
 
-# Execute Simulation Test
-if __name__ == "__main__":
-    mock_col_config = {"length_m": 30.0, "stationary_phase": "5% phenyl"}
-    mock_jobs = [
-        {"id": "mol_0", "smiles": "CC(=O)Oc1ccccc1C(=O)O", "mw": 180.15, "logp": 1.19, "tpsa": 63.6, "status": "CACHED"}, # Aspirin
-        {"id": "mol_1", "smiles": "c1cc(O)ccc1", "mw": 94.11,  "logp": 1.46, "tpsa": 20.2, "status": "COMPUTED"} # Phenol
-    ]
-    
-    sim = MageChromatographySim(mock_col_config)
-    simulated_jobs = sim.simulate_retention(mock_jobs, temperature_ramp_rate=15.0)
-    
-    logger.info("\n⏱️ Predicted Retention Results:")
-    for j in simulated_jobs:
-        logger.info(f"ID: {j['id']} | RI: {j['predicted_ri']} | t_R: {j['predicted_tr']} min")
-        
-    t_axis, trace = sim.build_chromatogram(simulated_jobs, t_max=30.0, resolution=5000)
-    logger.info(f"\n✅ Chromatogram Array Generated. Shape: {trace.shape}, Max Peak: {np.max(trace):.1f}%")
-# %%

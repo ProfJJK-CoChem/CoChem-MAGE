@@ -177,18 +177,3 @@ class MageOptimizationEngine:
             
         return active_matrix
 
-# Execute Optimization Test
-if __name__ == "__main__":
-    mock_matrix = [
-        {"id": "mol_A", "predicted_ri": 950.0, "status": "CACHED"},
-        {"id": "mol_B", "predicted_ri": 980.0, "status": "COMPUTED"},
-        {"id": "mol_C", "predicted_ri": 1150.0, "status": "CACHED"}
-    ]
-    
-    optimizer = MageOptimizationEngine(target_resolution=1.5)
-    optimized_matrix = optimizer.optimize_separation(mock_matrix)
-    
-    logger.info("\n📊 Final Status Matrix:")
-    for m in optimized_matrix:
-        logger.info(f"{m['id']} | RI: {m['predicted_ri']} | Ramp: {m.get('optimal_ramp_rate')} °C/min | State: {m.get('optimization_status')}")
-# %%
